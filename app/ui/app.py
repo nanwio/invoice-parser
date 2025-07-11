@@ -1,0 +1,268 @@
+# Copyright 2024 Artificial Intelligence Labs, SL
+
+import time
+import json
+import hashlib
+import gradio as gr
+
+from loguru import logger
+from jose import jwt
+
+from app.services.parser.parser import InvoiceParser
+from app.services.cache import cache_service
+from app.services.classifier import document_classifier
+from app.services.parser.models import Invoice
+from app.settings import settings
+
+
+# Initialize parser
+parser = InvoiceParser()
+
+
+def format_invoice_result(invoice: Invoice) -> str:
+    """
+    Format invoice data for display.
+    """
+    result = "## Parsed Invoice Data\n\n"
+
+    # Metadata
+    if invoice.metadata:
+        result += "### Invoice Information\n"
+        if invoice.metadata.invoice_number:
+            result += f"- **Invoice Number:** {invoice.metadata.invoice_number}\n"
+        if invoice.metadata.issue_date:
+            result += f"- **Issue Date:** {invoice.metadata.issue_date}\n"
+        if invoice.metadata.due_date:
+            result += f"- **Due Date:** {invoice.metadata.due_date}\n"
+        if invoice.metadata.order_number:
+            result += f"- **Order Number:** {invoice.metadata.order_number}\n"
+        result += "\n"
+
+    # Parties
+    result += "### Parties\n"
+    result += f"**Vendor:** {invoice.parties.vendor.name}\n"
+    if invoice.parties.vendor.tax_id:
+        result += f"- Tax ID: {invoice.parties.vendor.tax_id}\n"
+    result += f"\n**Customer:** {invoice.parties.customer.name}\n"
+    if invoice.parties.customer.tax_id:
+        result += f"- Tax ID: {invoice.parties.customer.tax_id}\n"
+    result += "\n"
+
+    # Financial Details
+    result += "### Financial Summary\n"
+    fd = invoice.financial_details
+    if fd.currency:
+        result += f"- **Currency:** {fd.currency}\n"
+    result += f"- **Subtotal:** {fd.subtotal}\n"
+    result += f"- **Tax ({fd.tax.type}):** {fd.tax.amount} ({fd.tax.rate}%)\n"
+    result += f"- **Total:** {fd.total_amount}\n"
+    if fd.payment and fd.payment.method:
+        result += f"- **Payment Method:** {fd.payment.method.value}\n"
+    result += "\n"
+
+    # Line Items
+    if invoice.items:
+        result += "### Line Items\n"
+        for i, item in enumerate(invoice.items, 1):
+            result += f"\n**Item {i}**\n"
+            if item.item_id:
+                result += f"- ID: {item.item_id}\n"
+            if item.description:
+                result += f"- Description: {item.description}\n"
+            result += f"- Quantity: {item.quantity}\n"
+            result += f"- Unit Price: {item.unit_price}\n"
+            result += f"- Total: {item.line_total}\n"
+
+    return result
+
+
+async def process_invoice(file, token: str | None = None) -> tuple[str, str, str, str]:
+    """
+    Process uploaded invoice file.
+
+    Returns:
+        Tuple of (result_text, metadata_text, json_data, status_message)
+    """
+    if not file:
+        return "", "", "", "Please upload a PDF file"
+
+    if not token:
+        return "", "", "", "Please enter your API token"
+
+    try:
+        jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+
+        # Read file
+        start_time = time.perf_counter()
+        file_bytes = file
+
+        # Calculate hash
+        file_hash = hashlib.sha256(file_bytes).hexdigest()
+
+        # Check cache
+        cached_invoice = await cache_service.get_invoice(file_hash)
+
+        if cached_invoice:
+            invoice_result = cached_invoice
+            from_cache = True
+            cache_status = "Cached"
+        else:
+            # Classify document
+            logger.info("Classifying document...")
+            classification_result = await document_classifier.classify_bytes(file_bytes)
+
+            if not classification_result.is_invoice:
+                return (
+                    "",
+                    f"**Document Type:** {classification_result.document_type}\n"
+                    f"**Reason:** {classification_result.reason}",
+                    "",
+                    f"Document is not an invoice ({classification_result.document_type})"
+                )
+
+            # Parse invoice
+            logger.info("Parsing invoice...")
+            invoice_result = await parser.parse_bytes(file_bytes)
+            from_cache = False
+            cache_status = "Fresh"
+
+            # Cache result
+            await cache_service.set_invoice(file_hash, invoice_result)
+
+        end_time = time.perf_counter()
+        processing_time = end_time - start_time
+
+        # Format results
+        formatted_result = format_invoice_result(invoice_result)
+
+        metadata = f"""### Processing Information
+- **File Hash:** `{file_hash[:16]}...`
+- **Processing Time:** {processing_time:.2f}s
+- **Cache Status:** {cache_status}
+- **From Cache:** {'Yes' if from_cache else 'No'}
+"""
+
+        # JSON output
+        json_output = json.dumps(invoice_result.model_dump(), indent=2, default=str)
+
+        return (
+            formatted_result,
+            metadata,
+            json_output,
+            f"Invoice processed successfully in {processing_time:.2f}s"
+        )
+
+    except Exception as e:
+        logger.exception(f"Error processing invoice: {e}")
+        return "", "", "", f"Error: {str(e)}"
+
+
+def create_gradio_interface():
+    """Create the Gradio interface for invoice parsing."""
+
+    with gr.Blocks(title="Invoice Parser UI", theme=gr.themes.Default()) as demo:
+        gr.Markdown(
+            """
+            # Invoice Parser UI
+
+            Upload a PDF invoice to extract structured data using AI.
+
+            **Authentication Required**: Enter your API token to access the service.
+            """
+        )
+
+        with gr.Row():
+            with gr.Column(scale=2):
+                # Token input with persistence
+                token_input = gr.Textbox(
+                    label="API Token",
+                    placeholder="Enter your JWT token here",
+                    type="password",
+                    value="",
+                    info="Your authentication token for API access"
+                )
+
+                # File upload
+                file_input = gr.File(
+                    label="Upload Invoice (PDF)",
+                    file_types=[".pdf"],
+                    type="binary"
+                )
+
+                # Process button
+                process_btn = gr.Button(
+                    "Process Invoice",
+                    variant="primary",
+                    size="lg"
+                )
+
+                # Status message
+                status_output = gr.Textbox(
+                    label="Status",
+                    interactive=False,
+                    lines=1
+                )
+
+            with gr.Column(scale=3):
+                # Results tabs
+                with gr.Tabs():
+                    with gr.Tab("Parsed Data"):
+                        result_output = gr.Markdown(
+                            value="*Upload an invoice to see results*"
+                        )
+
+                    with gr.Tab("Metadata"):
+                        metadata_output = gr.Markdown(
+                            value="*Processing information will appear here*"
+                        )
+
+                    with gr.Tab("JSON Output"):
+                        json_output = gr.Code(
+                            language="json",
+                            label="Raw JSON Data",
+                            interactive=False
+                        )
+
+        # Example and instructions
+        with gr.Accordion("Instructions & Examples", open=False):
+            gr.Markdown(
+                """
+                ### How to use:
+                1. **Get a token**: Generate a JWT token the CLI utility
+                2. **Enter token**: Paste your token in the 'API Token' field
+                3. **Upload invoice**: Select a PDF invoice file
+                4. **Process**: Click the Process Invoice button
+                5. **View results**: Check the parsed data, metadata, and JSON output
+                ```
+                """
+            )
+
+        # Connect the process button
+        process_btn.click(
+            fn=process_invoice,
+            inputs=[file_input, token_input],
+            outputs=[result_output, metadata_output, json_output, status_output]
+        )
+
+        # Auto-save token to browser storage (for convenience)
+        demo.load(
+            None,
+            None,
+            None,
+            js="""
+            () => {
+                // Try to load saved token
+                const savedToken = localStorage.getItem('invoice_parser_token');
+                if (savedToken) {
+                    document.querySelector('input[type="password"]').value = savedToken;
+                }
+
+                // Save token when it changes
+                document.querySelector('input[type="password"]').addEventListener('change', (e) => {
+                    localStorage.setItem('invoice_parser_token', e.target.value);
+                });
+            }
+            """
+        )
+
+    return demo

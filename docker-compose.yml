@@ -1,0 +1,50 @@
+services:
+  redis:
+    image: redis:latest
+    container_name: invoice-parser-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - invoice-parser-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: invoice-parser-app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app:ro  # Mount app directory as read-only for development
+    networks:
+      - invoice-parser-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  invoice-parser-network:
+    driver: bridge
