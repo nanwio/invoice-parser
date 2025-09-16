@@ -35,6 +35,10 @@ dependencies = [
     "python-dotenv>=1.1.1",
     "cloudflare>=3.0.0",
     "typer[rich]>=0.12.3",
+    "opencv-python>=4.8.0",
+    "pyzbar>=0.1.9",
+    "qrcode[pil]>=7.4.2",
+    "aiohttp>=3.9.0",
 ]
 
 [tool.pdm.build]
