@@ -7,11 +7,11 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
 
     # Security
-    SECRET_KEY: str = ""
+    SECRET_KEY: str
 
     # Model Configuration
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL_NAME: str = "gemini-2.5-flash"
+    GEMINI_MODEL_NAME: str = "gemini-2.5-flash-lite"
 
     # Redis Configuration
     REDIS_URL: str = "redis://localhost:6379/0"

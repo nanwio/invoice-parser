@@ -1,48 +1,33 @@
-# Use a Python image with uv pre-installed
+# Use a single-stage build for simplicity and to avoid symlink issues.
 FROM ghcr.io/astral-sh/uv:debian-slim
 
-# Install the project into `/app`
+# Create a non-root user and group
+RUN groupadd --system --gid 1001 appuser && \
+    useradd --system --create-home --uid 1001 --gid 1001 appuser
+
+# Install system dependencies required by the application
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends poppler-utils && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set up the working directory and permissions
 WORKDIR /app
+RUN chown appuser:appuser /app
 
-# Enable bytecode compilation
-ENV UV_COMPILE_BYTECODE=1
+# Switch to the non-root user
+USER appuser
 
-# Copy from the cache instead of linking since it's a mounted volume
-ENV UV_LINK_MODE=copy
+# Copy application files
+COPY --chown=appuser:appuser pyproject.toml uv.lock README.md ./
+COPY --chown=appuser:appuser app ./app
+COPY --chown=appuser:appuser scripts ./scripts
 
-# Install the project's dependencies using the lockfile and settings
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-dev
-
-# Install dependencies
-# Update GPG keys and install poppler-utils
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    gnupg \
-    && apt-key adv --refresh-keys --keyserver keyserver.ubuntu.com \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-# Then, add the rest of the project source code and install it
-# Installing separately from its dependencies allows optimal layer caching
-ADD app /app/app
-ADD pyproject.toml /app
-ADD uv.lock /app
-ADD README.md /app
-
-RUN --mount=type=cache,target=/root/.cache/uv \
+# Install dependencies into a virtual environment
+RUN uv venv && \
     uv sync --frozen --no-dev
 
-# Place executables in the environment at the front of the path
-ENV PATH="/app/.venv/bin:$PATH"
-
-# Reset the entrypoint, don't invoke `uv`
-ENTRYPOINT []
-
+# Expose the port the app runs on
 EXPOSE 8000
 
-# Start the server
-CMD ["uv", "run", "python", "app/server.py"]
+# Start the server by activating the venv and running uvicorn
+CMD ["/bin/bash", "-c", "source .venv/bin/activate && uvicorn app.server:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -1,6 +1,6 @@
 # Copyright 2024 Artificial Intelligence Labs, SL
 
-from .parser import invoice_parser
+from .parser import invoice_parser, enhanced_invoice_parser
 from .models import (
     TaxRateType,
     BankPaymentMethod,
@@ -28,5 +28,6 @@ __all__ = [
     "Metadata",
     "InvoiceParties",
     "Invoice",
-    "invoice_parser"
+    "invoice_parser",
+    "enhanced_invoice_parser"
 ]

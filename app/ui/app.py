@@ -90,6 +90,16 @@ async def process_invoice(file, token: str | None = None) -> tuple[str, str, str
         return "", "", "", "Please enter your API token"
 
     try:
+        # Clean and validate token
+        token = token.strip()
+        if not token:
+            return "", "", "", "Please enter a valid API token"
+
+        # Validate token format (should have 3 parts separated by dots)
+        token_parts = token.split('.')
+        if len(token_parts) != 3:
+            return "", "", "", f"Invalid token format. Token has {len(token_parts)} parts, expected 3"
+
         jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
 
         # Read file
@@ -176,10 +186,12 @@ def create_gradio_interface():
                 # Token input with persistence
                 token_input = gr.Textbox(
                     label="API Token",
-                    placeholder="Enter your JWT token here",
-                    type="password",
+                    placeholder="Enter your JWT token here (eyJ...)",
+                    type="text",
                     value="",
-                    info="Your authentication token for API access"
+                    info="Your authentication token for API access",
+                    lines=3,
+                    max_lines=3
                 )
 
                 # File upload
