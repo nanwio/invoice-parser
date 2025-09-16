@@ -4,6 +4,7 @@ import qrcode
 import base64
 from io import BytesIO
 from typing import Dict, Any, List, Optional, Tuple
+from datetime import datetime
 from loguru import logger
 
 from app.services.verifactu.models import (

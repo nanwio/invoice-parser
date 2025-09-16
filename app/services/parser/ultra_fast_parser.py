@@ -108,11 +108,8 @@ class UltraFastInvoiceParser:
             invoice = await self._instructor.chat.completions.create(
                 model=settings.GEMINI_MODEL_NAME,
                 messages=messages,
-                response_model=Invoice,
-                # Ultra-fast optimization settings
-                temperature=0,  # Deterministic for speed
-                max_tokens=4096,  # Limit tokens for speed
-                timeout=30  # Quick timeout
+                response_model=Invoice
+                # Ultra-fast optimization (Gemini specific params removed for compatibility)
             )
 
             performance_metrics['gemini_time'] = time.perf_counter() - gemini_start

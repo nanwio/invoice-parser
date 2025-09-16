@@ -39,6 +39,7 @@ dependencies = [
     "pyzbar>=0.1.9",
     "qrcode[pil]>=7.4.2",
     "aiohttp>=3.9.0",
+    "reportlab>=4.0.0",
 ]
 
 [tool.pdm.build]

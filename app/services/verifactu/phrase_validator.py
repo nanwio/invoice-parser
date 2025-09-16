@@ -17,14 +17,12 @@ class PhraseValidator:
     """
 
     def __init__(self):
-        # Official mandatory phrases for VERIFACTU compliance
+        # Official mandatory phrases for VERIFACTU compliance (2026)
         self.mandatory_phrases = [
             "Factura verificable en la sede electrónica de la AEAT",
             "VERIFACTU",
             "Verificable en la sede electrónica de la Agencia Tributaria",
-            "Factura verificable en sede electrónica AEAT",
-            "Factura verificable AEAT",
-            "Verificable en AEAT"
+            "Factura verificable en sede electrónica AEAT"
         ]
 
         # Common variations and acceptable alternatives
@@ -108,7 +106,7 @@ class PhraseValidator:
 
         # Normalize accented characters for comparison
         accent_map = {
-            'á': 'a', 'é': e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n',
+            'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n',
             'ü': 'u'
         }
         for accented, plain in accent_map.items():

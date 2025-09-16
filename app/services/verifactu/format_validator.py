@@ -18,7 +18,7 @@ class FormatValidator:
     """
 
     def __init__(self):
-        # Required fields according to VERIFACTU specifications
+        # Required fields according to VERIFACTU specifications (2026)
         self.required_fields = {
             'issuer_data': {
                 'nif': 'NIF del emisor',
@@ -34,6 +34,11 @@ class FormatValidator:
                 'tax_amount': 'Importe de IVA',
                 'tax_rate': 'Tipo de IVA aplicado',
                 'subtotal': 'Base imponible'
+            },
+            'verifactu_specific': {
+                'hash': 'Hash criptográfico VERIFACTU',
+                'registry_number': 'Número de registro',
+                'chain_code': 'Código de encadenamiento'
             }
         }
 
