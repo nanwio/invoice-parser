@@ -6,7 +6,6 @@ from loguru import logger
 
 from app.services.parser.models import Invoice
 from app.services.parser.parser import enhanced_invoice_parser
-from app.services.validation import InvoiceValidator
 from .donut_engine import donut_engine
 
 
@@ -23,7 +22,8 @@ class HybridInvoiceParser:
     """
 
     def __init__(self):
-        self.validator = InvoiceValidator()
+        from app.services.validation import get_invoice_validator
+        self.validator = get_invoice_validator()()
         self.donut_timeout = 10.0  # Max time for DONUT processing
         self.confidence_threshold = 0.7  # Minimum confidence for DONUT results
 

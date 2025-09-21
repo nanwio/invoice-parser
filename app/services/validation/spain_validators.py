@@ -142,3 +142,7 @@ class SpanishTaxValidator:
             return 'CIF'
         else:
             return None
+
+
+# Alias for compatibility
+SpanishTaxIDValidator = SpanishTaxValidator

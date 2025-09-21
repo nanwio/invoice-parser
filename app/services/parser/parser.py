@@ -11,7 +11,6 @@ from typing import Dict, Any, Tuple
 from app.services.parser.models import Invoice
 from app.services.prompts import EXTRACTION_PROMPT
 from app.services.preprocessing import ImageProcessor
-from app.services.validation import InvoiceValidator
 from app.settings import settings
 
 
@@ -28,7 +27,8 @@ class EnhancedInvoiceParser:
             use_async=True
         )
         self.image_processor = ImageProcessor()
-        self.validator = InvoiceValidator()
+        from app.services.validation import get_invoice_validator
+        self.validator = get_invoice_validator()()
 
     async def parse_bytes(self, document_bytes: bytes, use_preprocessing: bool = True) -> Tuple[Invoice, Dict[str, Any]]:
         """

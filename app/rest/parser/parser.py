@@ -1,18 +1,15 @@
 # Copyright 2024 Artificial Intelligence Labs, SL
 
-import io
 import uuid
 import time
 import arrow
-import hashlib
 
 from datetime import timedelta
-from pypdf import PdfReader
 from fastapi import APIRouter, UploadFile, HTTPException, Security, Depends
 from loguru import logger
 from starlette import status
 
-from app.rest.models import ParsingResult, DocumentInfo, DocumentPageSize, ParsingJobInfo, EnhancedParsingResult, ValidationInfo, FastParsingResult, PerformanceMetrics
+from app.rest.models import ParsingResult, ParsingJobInfo, EnhancedParsingResult, ValidationInfo, FastParsingResult, PerformanceMetrics
 from app.rest.parser.docs import INVOICE_PARSING_RESULT_EXAMPLE
 
 from app.services.security.auth import get_current_user
@@ -21,7 +18,8 @@ from app.services.classifier import document_classifier
 from app.services.parser import invoice_parser, enhanced_invoice_parser
 from app.services.ocr.hybrid_parser import HybridInvoiceParser
 from app.services.parser.ultra_fast_parser import ultra_fast_parser
-from app.settings import settings
+from app.services.validation.file_validator import validate_uploaded_file
+from app.services.document_utils import calculate_file_hash, extract_document_info
 
 
 router = APIRouter()
@@ -81,7 +79,7 @@ async def parse(
         file_bytes = await invoice.read()
         
         # Calculate file hash
-        file_hash = hashlib.sha256(file_bytes).hexdigest()
+        file_hash = calculate_file_hash(file_bytes)
         logger.info(f"File hash: {file_hash[:8]}...")
         
         # Check cache first
@@ -120,16 +118,11 @@ async def parse(
         end_time = time.perf_counter()
         
         # Generate document info
-        reader = PdfReader(io.BytesIO(file_bytes))
-        page = reader.pages[0]
-        
+        document_info = extract_document_info(file_bytes, file_hash)
+
         # Build result
         result = ParsingResult(
-            document=DocumentInfo(
-                hash=file_hash,
-                num_pages=len(reader.pages),
-                page_size=DocumentPageSize.from_mediabox(page.mediabox),
-            ),
+            document=document_info,
             job=ParsingJobInfo(
                 job_id=uuid.uuid4(),
                 job_time=timedelta(seconds=end_time - start_time),
@@ -195,26 +188,15 @@ async def parse_enhanced(
     """
     logger.info(f"Enhanced parsing for file {invoice.filename} (preprocessing: {use_preprocessing})")
 
-    # Validate file size
-    if invoice.size and invoice.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File size exceeds maximum limit of {settings.MAX_FILE_SIZE_MB}MB"
-        )
-
-    # Validate file type
-    if invoice.content_type not in settings.ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Only PDF files are allowed."
-        )
+    # Validate uploaded file
+    await validate_uploaded_file(invoice)
 
     try:
         start_time = time.perf_counter()
         file_bytes = await invoice.read()
 
         # Calculate file hash
-        file_hash = hashlib.sha256(file_bytes).hexdigest()
+        file_hash = calculate_file_hash(file_bytes)
         logger.info(f"File hash: {file_hash[:8]}...")
 
         # Document classification
@@ -243,16 +225,11 @@ async def parse_enhanced(
         end_time = time.perf_counter()
 
         # Generate document info
-        reader = PdfReader(io.BytesIO(file_bytes))
-        page = reader.pages[0]
+        document_info = extract_document_info(file_bytes, file_hash)
 
         # Build enhanced result
         result = EnhancedParsingResult(
-            document=DocumentInfo(
-                hash=file_hash,
-                num_pages=len(reader.pages),
-                page_size=DocumentPageSize.from_mediabox(page.mediabox),
-            ),
+            document=document_info,
             job=ParsingJobInfo(
                 job_id=uuid.uuid4(),
                 job_time=timedelta(seconds=end_time - start_time),
@@ -329,25 +306,14 @@ async def parse_fast(
     """
     logger.info(f"Fast parsing for file {invoice.filename}")
 
-    # Validate file size
-    if invoice.size and invoice.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File size exceeds maximum limit of {settings.MAX_FILE_SIZE_MB}MB"
-        )
-
-    # Validate file type
-    if invoice.content_type not in settings.ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Only PDF files are allowed."
-        )
+    # Validate uploaded file
+    await validate_uploaded_file(invoice)
 
     try:
         file_bytes = await invoice.read()
 
         # Calculate file hash
-        file_hash = hashlib.sha256(file_bytes).hexdigest()
+        file_hash = calculate_file_hash(file_bytes)
         logger.info(f"File hash: {file_hash[:8]}...")
 
         # Skip classification for ultra-fast parsing - assume it's an invoice
@@ -453,25 +419,14 @@ async def parse_lightning(
     """
     logger.info(f"Lightning parsing for file {invoice.filename}")
 
-    # Validate file size
-    if invoice.size and invoice.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File size exceeds maximum limit of {settings.MAX_FILE_SIZE_MB}MB"
-        )
-
-    # Validate file type
-    if invoice.content_type not in settings.ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Only PDF files are allowed."
-        )
+    # Validate uploaded file
+    await validate_uploaded_file(invoice)
 
     try:
         file_bytes = await invoice.read()
 
         # Calculate file hash
-        file_hash = hashlib.sha256(file_bytes).hexdigest()
+        file_hash = calculate_file_hash(file_bytes)
         logger.info(f"File hash: {file_hash[:8]}...")
 
         # Check cache first for instant response

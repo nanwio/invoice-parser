@@ -3,9 +3,11 @@
 from fastapi import APIRouter
 from app.rest.parser import parser
 from app.rest import health
-from app.rest.verifactu import verifactu
+# TODO: Enable VERIFACTU when core functionality is stable
+# from app.rest.verifactu import verifactu
 
 router = APIRouter()
 router.include_router(parser.router)
 router.include_router(health.router)
-router.include_router(verifactu.router, prefix="/verifactu", tags=["VERIFACTU"])
+# TODO: Enable VERIFACTU routes when ready for production
+# router.include_router(verifactu.router, prefix="/verifactu", tags=["VERIFACTU"])

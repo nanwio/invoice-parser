@@ -11,7 +11,7 @@ from instructor.multimodal import PDF
 
 from app.services.parser.models import Invoice
 from app.services.prompts import EXTRACTION_PROMPT
-from app.services.validation import InvoiceValidator
+from app.services.validation import get_invoice_validator
 from app.settings import settings
 
 
@@ -22,7 +22,7 @@ class UltraFastInvoiceParser:
     """
 
     def __init__(self):
-        self.validator = InvoiceValidator()
+        self.validator = get_invoice_validator()()
         self._client = None
         self._instructor = None
         self._model_loaded = False
