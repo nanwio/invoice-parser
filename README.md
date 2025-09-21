@@ -1,46 +1,63 @@
-# Invoice Parser API
+# InvoiceAI - Professional Invoice Processing Platform
 
-AI-powered service that extracts structured data from PDF invoices. Built with FastAPI and featuring intelligent caching
-and document classification.
+Complete AI-powered invoice processing solution with a modern SaaS frontend and robust FastAPI backend.
 
-## Quick Start
+## 🏗️ Architecture
 
-### Using Docker Compose
+This is a **monorepo** containing:
+
+```
+invoice-parser/
+├── backend/          # FastAPI service (AI processing)
+├── frontend/         # Next.js SaaS application
+├── docs/             # Documentation
+└── docker-compose.yml # Full stack deployment
+```
+
+## 🚀 Quick Start
+
+### Full Stack Development
 
 ```bash
 # Clone and setup
 git clone <repository-url>
-cd invoice-parsing
-cp .env.example .env
+cd invoice-parser
 
-# Edit .env with your API keys
-# - SECRET_KEY: Generate with `openssl rand -hex 32`
-# - GEMINI_API_KEY: Your AI API key
-
-# Start services
+# Start all services
 docker compose up -d
-
-# Generate authentication token
-./scripts/tokens.py generate --username user@example.com --days 365
 ```
 
 ### Access Points
 
-- API: `http://localhost:8000/api/v1/`
-- Web UI: `http://localhost:8000/ui`
-- API Docs: `http://localhost:8000/docs`
+- **Frontend SaaS**: `http://localhost:3000`
+- **Backend API**: `http://localhost:8000/api/v1/`
+- **API Docs**: `http://localhost:8000/docs`
+- **Web UI**: `http://localhost:8000/ui`
 
-## Local Development
+### Development Setup
 
+**Backend Development:**
 ```bash
+cd backend
+cp .env.example .env
+# Edit .env with your API keys
+
 # Install uv package manager
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install dependencies
+# Install dependencies and run
 uv sync
-
-# Run the application
 uv run python app/server.py
+```
+
+**Frontend Development:**
+```bash
+cd frontend
+cp .env.local.example .env.local
+# Edit .env.local with your keys
+
+npm install
+npm run dev
 ```
 
 ## Documentation

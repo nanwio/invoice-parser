@@ -15,22 +15,22 @@ services:
     networks:
       - invoice-parser-network
 
-  app:
+  backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
-    container_name: invoice-parser-app
+    container_name: invoice-parser-backend
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - ./backend/.env
     environment:
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       redis:
         condition: service_healthy
     volumes:
-      - ./app:/app/app:ro  # Mount app directory as read-only for development
+      - ./backend/app:/app/app:ro  # Mount app directory as read-only for development
     networks:
       - invoice-parser-network
     healthcheck:
@@ -39,6 +39,23 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: invoice-parser-frontend
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./frontend/.env.local
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - invoice-parser-network
     restart: unless-stopped
 
 volumes:
