@@ -18,6 +18,7 @@ from app.services.classifier import document_classifier
 from app.services.parser import invoice_parser, enhanced_invoice_parser
 from app.services.ocr.hybrid_parser import HybridInvoiceParser
 from app.services.parser.ultra_fast_parser import ultra_fast_parser
+from app.settings import settings
 from app.services.validation.file_validator import validate_uploaded_file
 from app.services.document_utils import calculate_file_hash, extract_document_info
 
