@@ -11,8 +11,8 @@ from typing import Tuple, Dict, Any
 from google import genai
 from loguru import logger
 
-from ..models.invoice_data import Invoice
-from ...configuration.app_settings import app_settings
+from invoice_processing.models.invoice_data import Invoice
+from configuration.app_settings import app_settings
 
 
 class GeminiInvoiceProcessor:

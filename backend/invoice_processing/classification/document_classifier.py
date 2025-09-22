@@ -14,7 +14,7 @@ from google import genai
 from instructor.multimodal import PDF
 from loguru import logger
 
-from ...configuration.app_settings import app_settings
+from configuration.app_settings import app_settings
 
 
 class DocumentClassification(BaseModel):

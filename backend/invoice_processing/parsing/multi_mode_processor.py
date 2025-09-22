@@ -9,12 +9,12 @@ import time
 from typing import Tuple, Dict, Any
 from loguru import logger
 
-from ..models.invoice_data import Invoice
-from ..ai_services.gemini_processor import GeminiInvoiceProcessor
-from ..ai_services.donut_processor import DonutOCRProcessor
-from ..validation.invoice_checker import InvoiceValidator, QuickValidator
-from ..classification.document_classifier import document_classifier
-from ..utilities.document_utils import document_utils
+from invoice_processing.models.invoice_data import Invoice
+from invoice_processing.ai_services.gemini_processor import GeminiInvoiceProcessor
+from invoice_processing.ai_services.donut_processor import DonutOCRProcessor
+from invoice_processing.validation.invoice_checker import InvoiceValidator, QuickValidator
+from invoice_processing.classification.document_classifier import document_classifier
+from invoice_processing.utilities.document_utils import document_utils
 
 
 class MultiModeInvoiceProcessor:

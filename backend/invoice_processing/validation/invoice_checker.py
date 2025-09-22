@@ -6,7 +6,7 @@ One responsibility: check if invoice data is valid and complete
 """
 
 from typing import Dict, List, Any
-from ..models.invoice_data import Invoice
+from invoice_processing.models.invoice_data import Invoice
 
 
 class InvoiceValidationResult:

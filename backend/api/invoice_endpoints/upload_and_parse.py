@@ -11,12 +11,12 @@ from datetime import timedelta
 from fastapi import APIRouter, UploadFile, HTTPException, Depends
 from loguru import logger
 
-from ...invoice_processing.parsing.multi_mode_processor import MultiModeInvoiceProcessor
-from ...invoice_processing.caching.redis_cache import invoice_cache
-from ...invoice_processing.classification.document_classifier import document_classifier
-from ...invoice_processing.utilities.document_utils import document_utils
-from ...api.security.jwt_auth import get_current_user
-from ...configuration.app_settings import app_settings
+from invoice_processing.parsing.multi_mode_processor import MultiModeInvoiceProcessor
+from invoice_processing.caching.redis_cache import invoice_cache
+from invoice_processing.classification.document_classifier import document_classifier
+from invoice_processing.utilities.document_utils import document_utils
+from api.security.jwt_auth import get_current_user
+from configuration.app_settings import app_settings
 
 
 router = APIRouter()

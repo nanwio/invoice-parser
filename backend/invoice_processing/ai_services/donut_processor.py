@@ -9,7 +9,7 @@ import asyncio
 from typing import Tuple, Dict, Any, Optional
 from loguru import logger
 
-from ..models.invoice_data import Invoice
+from invoice_processing.models.invoice_data import Invoice
 
 
 class DonutOCRProcessor:
@@ -86,7 +86,7 @@ class DonutOCRProcessor:
 
     def _convert_to_invoice(self, donut_data: Dict[str, Any]) -> Invoice:
         """Convert DONUT extracted data to Invoice object."""
-        from ..models.invoice_data import InvoiceParty, InvoiceFinancials, InvoiceTax
+        from invoice_processing.models.invoice_data import InvoiceParty, InvoiceFinancials, InvoiceTax
 
         # Create basic invoice structure from DONUT data
         vendor = InvoiceParty(name=donut_data.get("vendor_name", "Unknown Vendor"))
