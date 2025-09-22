@@ -9,7 +9,7 @@ import io
 import hashlib
 from typing import Dict, Any
 from pydantic import BaseModel
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 from loguru import logger
 
 
