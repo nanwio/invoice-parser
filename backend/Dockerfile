@@ -18,7 +18,7 @@ RUN chown appuser:appuser /app
 USER appuser
 
 # Copy application files
-COPY --chown=appuser:appuser pyproject.toml uv.lock README.md ./
+COPY --chown=appuser:appuser pyproject.toml uv.lock ./
 COPY --chown=appuser:appuser app ./app
 COPY --chown=appuser:appuser scripts ./scripts
 
@@ -29,5 +29,5 @@ RUN uv venv && \
 # Expose the port the app runs on
 EXPOSE 8000
 
-# Start the server by activating the venv and running uvicorn
-CMD ["/bin/bash", "-c", "source .venv/bin/activate && uvicorn app.server:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# OPTIMIZED: Start server with performance tuning for speed
+CMD ["/bin/bash", "-c", "source .venv/bin/activate && uvicorn app.server:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --loop uvloop --http httptools --access-log --log-level info"]

@@ -18,8 +18,8 @@ from app.ui.app import create_gradio_interface
 async def lifespan(app: FastAPI): # noqa
 
     # Startup
-    logger.info("Starting InvoiceParser API...")
-    
+    logger.info("🚀 Starting InvoiceParser API with LIGHTNING optimizations...")
+
     # Initialize Redis connection
     if settings.CACHE_ENABLED:
         redis_connected = await cache_service.connect()
@@ -27,7 +27,15 @@ async def lifespan(app: FastAPI): # noqa
             logger.info("Redis cache initialized successfully")
         else:
             logger.warning("Redis cache initialization failed - running without cache")
-    
+
+    # CRITICAL: Pre-warm Lightning parser for sub-second performance
+    try:
+        from app.services.parser.lightning_parser import startup_lightning_parser
+        await startup_lightning_parser()
+        logger.info("⚡ Lightning parser pre-warmed and ready!")
+    except Exception as e:
+        logger.error(f"Lightning parser warmup failed: {e}")
+
     yield
     
     # Shutdown

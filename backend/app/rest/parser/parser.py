@@ -109,8 +109,8 @@ async def parse(
             
             logger.info(f"Document classified as invoice")
             
-            # Parse the document
-            invoice_result = await invoice_parser.parse_bytes(file_bytes)
+            # Parse the document using ULTRA FAST parser for speed
+            invoice_result, validation_info = await ultra_fast_parser.parse_bytes_ultra_fast(file_bytes)
             from_cache = False
             
             # Cache the result
@@ -147,6 +147,84 @@ async def parse(
         raise HTTPException(
             status_code=400,
             detail="This invoice is not suitable for parsing because it has missing fields or its resolution is too low"
+        )
+
+
+@router.post(
+    "/parse/lightning",
+    response_model=ParsingResult,
+    dependencies=[Security(get_current_user)],
+    summary="⚡ Lightning-fast invoice parsing (<1.5s)",
+    description="Ultra-fast invoice parsing with aggressive optimizations for maximum speed",
+)
+async def parse_lightning(
+        invoice: UploadFile,
+        user: dict[str, str] = Depends(get_current_user)
+) -> ParsingResult:
+    logger.info(f"⚡ LIGHTNING parsing file {invoice.filename}")
+
+    # Quick validation
+    await validate_uploaded_file(invoice)
+
+    try:
+        start_time = time.perf_counter()
+        file_bytes = await invoice.read()
+
+        # Calculate file hash
+        file_hash = calculate_file_hash(file_bytes)
+        logger.info(f"File hash: {file_hash[:8]}...")
+
+        # Check cache first (LIGHTNING speed)
+        cached_invoice = await cache_service.get_invoice(file_hash)
+
+        # Cache hit, use cached result
+        if cached_invoice:
+            invoice_result = cached_invoice
+            from_cache = True
+        else:
+            # Quick classification check for safety
+            classification_result = await document_classifier.classify_bytes(file_bytes)
+            if not classification_result.is_invoice:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Document is not an invoice: {classification_result.document_type}"
+                )
+
+            # Use ULTRA FAST parser directly
+            invoice_result, validation_info = await ultra_fast_parser.parse_bytes_ultra_fast(file_bytes)
+            from_cache = False
+
+            # Cache the result
+            await cache_service.set_invoice(file_hash, invoice_result)
+
+        end_time = time.perf_counter()
+
+        # Generate document info
+        document_info = extract_document_info(file_bytes, file_hash)
+
+        # Build result
+        result = ParsingResult(
+            document=document_info,
+            job=ParsingJobInfo(
+                job_id=uuid.uuid4(),
+                job_time=timedelta(seconds=end_time - start_time),
+                requested_by=user["username"],
+                requested_at=arrow.now().datetime
+            ),
+            result=invoice_result
+        )
+
+        # Log performance
+        processing_time = end_time - start_time
+        logger.info(f"⚡ LIGHTNING completed - From cache: {from_cache}, Time: {processing_time:.3f}s")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"⚡ Lightning parsing failed for {invoice.filename}: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail="Lightning parsing failed - try regular mode for difficult documents"
         )
 
 

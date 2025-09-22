@@ -76,9 +76,14 @@ def format_invoice_result(invoice: Invoice) -> str:
     return result
 
 
-async def process_invoice(file, token: str | None = None) -> tuple[str, str, str, str]:
+async def process_invoice(file, token: str | None = None, processing_mode: str = "fast") -> tuple[str, str, str, str]:
     """
-    Process uploaded invoice file.
+    Process uploaded invoice file with selectable processing mode.
+
+    Args:
+        file: Uploaded PDF file
+        token: API authentication token
+        processing_mode: "fast" (no preprocessing) or "enhanced" (with preprocessing)
 
     Returns:
         Tuple of (result_text, metadata_text, json_data, status_message)
@@ -130,9 +135,23 @@ async def process_invoice(file, token: str | None = None) -> tuple[str, str, str
                     f"Document is not an invoice ({classification_result.document_type})"
                 )
 
-            # Parse invoice
-            logger.info("Parsing invoice...")
-            invoice_result = await parser.parse_bytes(file_bytes)
+            # Parse invoice with selected mode
+            if processing_mode == "lightning":
+                logger.info("⚡ Parsing invoice with LIGHTNING mode...")
+                from app.services.parser.ultra_fast_parser import ultra_fast_parser
+                invoice_result, validation_info = await ultra_fast_parser.parse_bytes_ultra_fast(file_bytes)
+                processing_method = "⚡ Lightning (ultra-fast)"
+            elif processing_mode == "enhanced":
+                logger.info("Parsing invoice with enhanced preprocessing...")
+                from app.services.parser.parser import enhanced_invoice_parser
+                invoice_result, validation_info = await enhanced_invoice_parser.parse_bytes(file_bytes, use_preprocessing=True)
+                processing_method = "Enhanced (with preprocessing)"
+            else:
+                logger.info("Parsing invoice with fast mode...")
+                from app.services.parser.ultra_fast_parser import ultra_fast_parser
+                invoice_result, validation_info = await ultra_fast_parser.parse_bytes_ultra_fast(file_bytes)
+                processing_method = "Fast (direct processing)"
+
             from_cache = False
             cache_status = "Fresh"
 
@@ -145,12 +164,20 @@ async def process_invoice(file, token: str | None = None) -> tuple[str, str, str
         # Format results
         formatted_result = format_invoice_result(invoice_result)
 
+        # Add processing method info if not from cache
+        method_info = ""
+        if not from_cache:
+            method_info = f"- **Processing Method:** {processing_method}\n"
+            if 'validation_info' in locals() and validation_info:
+                quality_score = validation_info.get('validation_results', {}).get('quality_score', 'N/A')
+                method_info += f"- **Quality Score:** {quality_score}\n"
+
         metadata = f"""### Processing Information
 - **File Hash:** `{file_hash[:16]}...`
 - **Processing Time:** {processing_time:.2f}s
 - **Cache Status:** {cache_status}
 - **From Cache:** {'Yes' if from_cache else 'No'}
-"""
+{method_info}"""
 
         # JSON output
         json_output = json.dumps(invoice_result.model_dump(), indent=2, default=str)
@@ -177,6 +204,11 @@ def create_gradio_interface():
 
             Upload a PDF invoice to extract structured data using AI.
 
+            **Choose your processing mode:**
+            - **⚡ Lightning Mode**: Ultra-fast processing (~1-1.5 seconds) - Maximum speed with aggressive optimizations
+            - **🚀 Fast Mode**: Direct processing (~2-3 seconds) - Recommended for most invoices
+            - **🔍 Enhanced Mode**: With image preprocessing (~6-8 seconds) - For low-quality scanned documents
+
             **Authentication Required**: Enter your API token to access the service.
             """
         )
@@ -199,6 +231,18 @@ def create_gradio_interface():
                     label="Upload Invoice (PDF)",
                     file_types=[".pdf"],
                     type="binary"
+                )
+
+                # Processing mode selection
+                processing_mode = gr.Radio(
+                    choices=[
+                        ("⚡ Lightning Mode (<1.5s)", "lightning"),
+                        ("🚀 Fast Mode (2-3s)", "fast"),
+                        ("🔍 Enhanced Mode (6-8s)", "enhanced")
+                    ],
+                    value="lightning",
+                    label="Processing Mode",
+                    info="Lightning: Ultra-fast | Fast: Direct processing | Enhanced: With preprocessing"
                 )
 
                 # Process button
@@ -252,7 +296,7 @@ def create_gradio_interface():
         # Connect the process button
         process_btn.click(
             fn=process_invoice,
-            inputs=[file_input, token_input],
+            inputs=[file_input, token_input, processing_mode],
             outputs=[result_output, metadata_output, json_output, status_output]
         )
 

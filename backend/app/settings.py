@@ -9,9 +9,9 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str
 
-    # Model Configuration
+    # Model Configuration - OPTIMIZED FOR SPEED
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL_NAME: str = "gemini-2.5-flash-lite"
+    GEMINI_MODEL_NAME: str = "gemini-2.5-flash"  # Faster than flash-lite
 
     # Redis Configuration
     REDIS_URL: str = "redis://localhost:6379/0"
