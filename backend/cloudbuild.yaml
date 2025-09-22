@@ -13,11 +13,11 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'invoice-parser-backend'
+      - 'invoice-parser-api'
       - '--image'
       - 'gcr.io/$PROJECT_ID/invoice-parser:$COMMIT_SHA'
       - '--region'
-      - 'us-central1'
+      - 'europe-west4'
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
