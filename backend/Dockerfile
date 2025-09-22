@@ -19,8 +19,10 @@ USER appuser
 
 # Copy application files
 COPY --chown=appuser:appuser pyproject.toml uv.lock ./
-COPY --chown=appuser:appuser app ./app
-COPY --chown=appuser:appuser scripts ./scripts
+COPY --chown=appuser:appuser *.py ./
+COPY --chown=appuser:appuser api ./api
+COPY --chown=appuser:appuser configuration ./configuration
+COPY --chown=appuser:appuser invoice_processing ./invoice_processing
 
 # Install dependencies into a virtual environment
 RUN uv venv && \
@@ -30,4 +32,4 @@ RUN uv venv && \
 EXPOSE 8000
 
 # OPTIMIZED: Start server with performance tuning for speed
-CMD ["/bin/bash", "-c", "source .venv/bin/activate && uvicorn app.server:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --loop uvloop --http httptools --access-log --log-level info"]
+CMD ["/bin/bash", "-c", "source .venv/bin/activate && uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --loop uvloop --http httptools --access-log --log-level info"]
