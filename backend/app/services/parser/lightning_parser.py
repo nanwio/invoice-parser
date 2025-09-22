@@ -47,7 +47,7 @@ async def initialize_lightning_model():
 
     _global_instructor = instructor.from_genai(
         _global_client,
-        mode=instructor.Mode.GENAI_STRUCTURED_OUTPUTS,
+        mode=instructor.Mode.GENAI_TOOLS,  # FASTER than STRUCTURED_OUTPUTS
         use_async=True
     )
 
@@ -189,18 +189,18 @@ class LightningInvoiceParser:
         errors = []
 
         # Only validate absolutely critical fields for speed
-        if not invoice.vendor_name:
+        if not invoice.parties.vendor.name:
             errors.append("Missing vendor name")
 
-        if not invoice.total_amount or invoice.total_amount <= 0:
+        if not invoice.financial_details.total_amount or invoice.financial_details.total_amount <= 0:
             errors.append("Invalid total amount")
 
         # Lightning-fast quality score
         critical_fields = [
-            bool(invoice.vendor_name),
-            bool(invoice.total_amount),
-            bool(invoice.invoice_number),
-            bool(invoice.invoice_date)
+            bool(invoice.parties.vendor.name),
+            bool(invoice.financial_details.total_amount),
+            bool(invoice.metadata and invoice.metadata.invoice_number),
+            bool(invoice.metadata and invoice.metadata.issue_date)
         ]
 
         quality_score = (sum(critical_fields) / len(critical_fields)) * 100

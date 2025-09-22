@@ -23,7 +23,7 @@ class EnhancedInvoiceParser:
         self._client = genai.Client(api_key=settings.GEMINI_API_KEY)
         self._instructor = instructor.from_genai(
             self._client,
-            mode=instructor.Mode.GENAI_STRUCTURED_OUTPUTS,
+            mode=instructor.Mode.GENAI_TOOLS,  # FASTER than STRUCTURED_OUTPUTS
             use_async=True
         )
         self.image_processor = ImageProcessor()
