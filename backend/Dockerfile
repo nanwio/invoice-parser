@@ -31,5 +31,5 @@ RUN uv venv && \
 # Expose the port the app runs on
 EXPOSE 8000
 
-# OPTIMIZED: Start server with performance tuning for speed
-CMD ["/bin/bash", "-c", "source .venv/bin/activate && uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --loop uvloop --http httptools --access-log --log-level info"]
+# Start server with basic configuration for debugging
+CMD ["/bin/bash", "-c", "source .venv/bin/activate && uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000} --log-level debug"]
