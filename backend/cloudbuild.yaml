@@ -33,7 +33,7 @@ steps:
       - '0'
       - '--port'
       - '8000'
-      - '--set-env-vars'
+      - '--update-env-vars'
       - 'PORT=8000,ENVIRONMENT=production,GEMINI_API_KEY=AIzaSyBHYapelDDrPCEqT2Sp3WEVCrtG96Bxpdw,GEMINI_MODEL_NAME=gemini-2.5-flash-lite,SECRET_KEY=d267baf1c866603de5c78bcb88a52f60ef78cd615d5239d08322e513e608726b,REDIS_URL=redis://localhost:6379/0'
 
 images:
