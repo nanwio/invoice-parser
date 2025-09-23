@@ -35,7 +35,7 @@ RUN chown -R appuser:appuser /app/.venv
 # This significantly reduces cold start time in production.
 COPY --chown=appuser:appuser backend/scripts/cache_models.py ./scripts/
 USER appuser
-RUN python scripts/cache_models.py
+RUN /app/.venv/bin/python scripts/cache_models.py
 USER root
 
 #----------------------------------------------------------------
