@@ -53,7 +53,8 @@ class DocumentClassifier:
         logger.info("Classifying document type")
 
         try:
-            pdf_data = PDF(data=document_bytes)
+            b64_data = base64.b64encode(document_bytes).decode()
+            pdf_data = PDF(data=b64_data)
 
             # Simple classification prompt
             prompt = """Analyze this document and determine if it's an invoice.
