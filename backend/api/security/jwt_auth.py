@@ -21,7 +21,7 @@ class JWTAuthenticator:
     def __init__(self):
         """Initialize JWT handler."""
         self.access_security = JwtAccessBearer(
-            secret_key=app_settings.security.SECRET_KEY,
+            secret_key=app_settings.security.JWT_SECRET_KEY,
             auto_error=True
         )
 

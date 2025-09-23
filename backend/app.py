@@ -18,7 +18,7 @@ app = FastAPI(
 
 # Add routes
 app.include_router(health_router, tags=["Health"])
-app.include_router(invoice_router, prefix="/api/v1", tags=["Invoices"])
+app.include_router(invoice_router, prefix="/api", tags=["Invoices"])
 
 
 @app.get("/")

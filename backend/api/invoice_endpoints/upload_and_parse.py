@@ -8,99 +8,75 @@ One endpoint: upload PDF, get structured invoice data
 import uuid
 import time
 from datetime import timedelta
-from fastapi import APIRouter, UploadFile, HTTPException, Depends
+from fastapi import APIRouter, File, UploadFile, Depends, HTTPException
+from typing import Dict, Any
+from uuid import uuid4
 from loguru import logger
 
-from invoice_processing.parsing.multi_mode_processor import InvoiceProcessor
-from invoice_processing.caching.redis_cache import invoice_cache
-from invoice_processing.classification.document_classifier import document_classifier
-from invoice_processing.utilities.document_utils import document_utils
 from api.security.jwt_auth import get_current_user
-from configuration.app_settings import app_settings
+from invoice_processing.caching.redis_cache import invoice_cache
+from invoice_processing.parsing.invoice_pipeline import InvoiceProcessor
+from invoice_processing.models.invoice_data import InvoiceParseResponse
+from invoice_processing.utilities.document_utils import document_utils
 
+router = APIRouter()
 
-router = APIRouter(prefix="/v1/invoice", tags=["Invoice Processing"])
+SUPPORTED_MIMETYPES = [
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/jpg",
+]
 
+@router.post(
+    "/v1/invoice/parse",
+    response_model=Dict[str, Any],
+    summary="Upload, parse, and validate an invoice document (PDF or Image)",
+    tags=["Invoices"]
+)
+async def upload_and_parse_invoice(
+    file: UploadFile = File(...),
+    user: str = Depends(get_current_user)
+):
+    job_id = str(uuid4())
+    logger.info(f"[Job {job_id}] Received file '{file.filename}' from user '{user['username']}'")
 
-class InvoiceParseResponse:
-    """Standard response for a parsed invoice."""
-
-    def __init__(self, invoice_data, processing_results, user, job_id):
-        self.success = True
-        self.job_id = job_id
-        self.invoice_data = invoice_data
-        self.validation = processing_results.get("validation", {})
-        self.processing_method = processing_results.get("processing_method", "unknown")
-        self.processing_time_seconds = processing_results.get("total_processing_time", 0.0)
-        self.document_info = processing_results.get("document_info", {})
-        self.user = user
-
-
-@router.post("/parse", status_code=200)
-async def parse_invoice(
-    file: UploadFile,
-    user: dict[str, str] = Depends(get_current_user)
-) -> dict:
-    """
-    Uploads a PDF invoice, processes it through the pipeline, and returns structured data.
-    This is the single, canonical endpoint for all invoice processing.
-    """
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
-
-    if file.size > app_settings.invoice_processing.MAX_FILE_SIZE_MB * 1024 * 1024:
+    if file.content_type not in SUPPORTED_MIMETYPES:
         raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Max size: {app_settings.invoice_processing.MAX_FILE_SIZE_MB}MB."
+            status_code=400,
+            detail=f"Invalid file type '{file.content_type}'. Supported types are: {', '.join(SUPPORTED_MIMETYPES)}"
         )
 
-    try:
-        job_id = str(uuid.uuid4())
-        logger.info(f"[Job {job_id}] Processing new file: {file.filename}")
-        
-        file_bytes = await file.read()
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty.")
+
+    # Caching is currently enabled only for PDFs due to reliable hashing.
+    if file.content_type == "application/pdf":
         file_hash = document_utils.calculate_file_hash(file_bytes)
-        
-        # 1. Check cache
         cached_invoice = await invoice_cache.get_cached_invoice(file_hash)
         if cached_invoice:
-            logger.info(f"[Job {job_id}] Cache HIT. Returning cached result.")
+            logger.info(f"[Job {job_id}] Cache HIT for PDF. Returning cached result.")
             processing_results = {
                 "validation": {"is_valid": True, "quality_score": 100.0, "errors": [], "warnings": []},
                 "processing_method": "cache_hit",
-                "total_processing_time": 0.01, # Simulate small cache access time
+                "total_processing_time": 0.01,
                 "document_info": document_utils.extract_document_info(file_bytes, file_hash)
             }
             response = InvoiceParseResponse(cached_invoice, processing_results, user["username"], job_id)
             return response.__dict__
-
-        logger.info(f"[Job {job_id}] Cache MISS. Starting full processing pipeline.")
         
-        # 2. Classify document
-        classification = await document_classifier.classify_bytes(file_bytes)
-        if not classification.is_invoice:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Document is not an invoice. Detected: {classification.document_type}."
-            )
+        logger.info(f"[Job {job_id}] PDF Cache MISS. Starting full processing pipeline.")
+    else:
+        file_hash = None # No hashing for images yet
+        logger.info(f"[Job {job_id}] Image file detected. Starting full processing pipeline.")
 
-        # 3. Process with the single, optimized processor
-        processor = InvoiceProcessor()
-        invoice_data, processing_results = await processor.process_invoice(file_bytes)
-        
-        # 4. Cache the new result
+    processor = InvoiceProcessor()
+    invoice_data, processing_results = await processor.process_invoice(file_bytes, file.content_type)
+    
+    # Cache the result if it was a PDF
+    if file_hash:
         await invoice_cache.cache_invoice(file_hash, invoice_data)
-        
-        # 5. Build and return response
-        processing_results["document_info"] = document_utils.extract_document_info(file_bytes, file_hash)
-        response = InvoiceParseResponse(invoice_data, processing_results, user["username"], job_id)
-        
-        logger.info(f"[Job {job_id}] Processing successful in {response.processing_time_seconds:.2f}s.")
-        return response.__dict__
-
-    except HTTPException as http_exc:
-        # Re-raise HTTP exceptions to let FastAPI handle them
-        raise http_exc
-    except Exception as e:
-        logger.error(f"A critical error occurred during invoice processing: {e}")
-        raise HTTPException(status_code=500, detail="A critical error occurred during processing.")
+    
+    response = InvoiceParseResponse(invoice_data, processing_results, user["username"], job_id)
+    return response.__dict__

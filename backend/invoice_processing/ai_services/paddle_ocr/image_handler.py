@@ -1,67 +1,56 @@
-from typing import List
+from typing import Generator
 from pdf2image import convert_from_path
 from PIL import Image
 import numpy as np
+import cv2
+import io
 
 class ImageHandler:
     """
-    Handles PDF to image conversion and image optimization for OCR.
+    Handles PDF/image conversion and optimization for OCR.
+    Uses a generator for memory-efficient PDF processing.
     """
 
-    def __init__(self, config_type: str = "balanced"):
+    def convert_pdf_to_images(self, pdf_path: str) -> Generator[Image.Image, None, None]:
         """
-        Initialize the image handler with a specific configuration type.
-        
-        Args:
-            config_type: "ultra_fast", "balanced", or "high_quality".
-        """
-        self.config_type = config_type
-
-    def convert_pdf_to_images(self, pdf_path: str) -> List[Image.Image]:
-        """
-        Convert PDF to a list of PIL Images with optimized settings.
+        Convert PDF to a generator of PIL Images, one for each page.
+        This is highly memory-efficient for large PDFs.
         
         Args:
             pdf_path: Path to the PDF file.
             
-        Returns:
-            A list of PIL Images.
+        Yields:
+            A PIL Image for each page in the PDF.
         """
-        dpi_map = {
-            "ultra_fast": 150,
-            "balanced": 200,
-            "high_quality": 250
-        }
-        optimal_dpi = dpi_map.get(self.config_type, 200)
+        optimal_dpi = 150
         
-        return convert_from_path(
+        images_from_pdf = convert_from_path(
             pdf_path, 
             dpi=optimal_dpi,
             fmt='RGB',
             thread_count=4
         )
+        
+        for image in images_from_pdf:
+            yield image
+
+    def convert_bytes_to_image(self, image_bytes: bytes) -> Image.Image:
+        """
+        Converts raw image bytes into a single PIL Image object.
+
+        Args:
+            image_bytes: The byte content of the image file (e.g., JPEG, PNG).
+
+        Returns:
+            A PIL Image object.
+        """
+        return Image.open(io.BytesIO(image_bytes))
 
     def optimize_image_for_ocr(self, image: Image.Image) -> np.ndarray:
         """
-        Optimize a single image for OCR processing (resize, convert to numpy).
-        
-        Args:
-            image: PIL Image to optimize.
-            
-        Returns:
-            An optimized numpy array of the image.
+        Convert a PIL Image to a BGR NumPy array suitable for PaddleOCR.
         """
-        np_img = np.array(image)
-        
-        height, width = np_img.shape[:2]
-        max_dimension = 2000
-        
-        if max(height, width) > max_dimension:
-            scale_factor = max_dimension / max(height, width)
-            new_height = int(height * scale_factor)
-            new_width = int(width * scale_factor)
-            
-            image_resized = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            np_img = np.array(image_resized)
-            
-        return np_img
+        # Ensure image is in RGB, then convert to BGR for OpenCV/Paddle
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)

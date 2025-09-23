@@ -5,8 +5,13 @@ Application settings - SIMPLE and CLEAR
 Every setting is self-explanatory
 """
 
+import os
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 from typing import Optional
+
+# Load environment variables
+load_dotenv()
 
 
 class InvoiceProcessingSettings(BaseSettings):
@@ -22,17 +27,16 @@ class AIModelSettings(BaseSettings):
     """Settings for AI model configuration."""
 
     # Gemini AI configuration
-    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL_NAME: str = "gemini-2.5-flash"
     GEMINI_TEMPERATURE: float = 0.1  # Lower = faster
     GEMINI_MAX_TOKENS: int = 2000   # Limit for speed
-
 
 class DatabaseSettings(BaseSettings):
     """Settings for database and caching."""
 
     # Redis cache
-    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     CACHE_ENABLED: bool = True
 
 
@@ -40,22 +44,20 @@ class SecuritySettings(BaseSettings):
     """Settings for security features."""
 
     # JWT tokens
-    SECRET_KEY: str
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "default-dev-key")
 
 
 class AppSettings(BaseSettings):
     """Main application settings container."""
 
-    # All settings in one place
     invoice_processing: InvoiceProcessingSettings = InvoiceProcessingSettings()
     ai_model: AIModelSettings = AIModelSettings()
     database: DatabaseSettings = DatabaseSettings()
     security: SecuritySettings = SecuritySettings()
 
     class Config:
-        env_file = '.env'
+        env_file = '.env'  # Relative to current working directory
         env_file_encoding = 'utf-8'
+        extra = 'ignore'  # Ignore extra fields from .env
 
-
-# Global settings instance - ready to use
 app_settings = AppSettings()

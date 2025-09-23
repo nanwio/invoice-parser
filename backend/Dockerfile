@@ -1,17 +1,60 @@
-# Use a single-stage build for simplicity and to avoid symlink issues.
-FROM ghcr.io/astral-sh/uv:debian-slim
+#----------------------------------------------------------------
+# 1. Builder Stage: To compile dependencies and cache models
+#----------------------------------------------------------------
+FROM ghcr.io/astral-sh/uv:debian-slim AS builder
 
-# Create a non-root user and group
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies needed for build and model caching
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for security
 RUN groupadd --system --gid 1001 appuser && \
     useradd --system --create-home --uid 1001 --gid 1001 appuser
 
-# Install system dependencies required by the application
+# Set up the working directory
+WORKDIR /app
+
+# Copy dependency files and install them into a virtual environment
+COPY --chown=appuser:appuser pyproject.toml uv.lock ./
+RUN uv venv && \
+    uv sync --frozen --no-dev
+ENV PATH="/app/.venv/bin:$PATH"
+
+# --- Pre-cache PaddleOCR models ---
+# This significantly reduces cold start time in production.
+COPY --chown=appuser:appuser scripts/cache_models.py ./scripts/
+USER appuser
+RUN python scripts/cache_models.py
+USER root
+
+#----------------------------------------------------------------
+# 2. Final Stage: The lean, production-ready container
+#----------------------------------------------------------------
+FROM ghcr.io/astral-sh/uv:debian-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Create a non-root user (must match the builder stage)
+RUN groupadd --system --gid 1001 appuser && \
+    useradd --system --create-home --uid 1001 --gid 1001 appuser
+
+# Install only the absolute bare-minimum RUNTIME dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     poppler-utils \
     libgl1-mesa-glx \
-    libglib2.0-0 && \
-    rm -rf /var/lib/apt/lists/*
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set up the working directory and permissions
 WORKDIR /app
@@ -20,19 +63,20 @@ RUN chown appuser:appuser /app
 # Switch to the non-root user
 USER appuser
 
-# Copy application files
-COPY --chown=appuser:appuser pyproject.toml uv.lock ./
+# Copy the venv, application code, and the warmed-up model cache
+COPY --from=builder --chown=appuser:appuser /app/.venv ./.venv
+COPY --from=builder --chown=appuser:appuser /home/appuser/.paddleocr /home/appuser/.paddleocr
 COPY --chown=appuser:appuser *.py ./
 COPY --chown=appuser:appuser api ./api
 COPY --chown=appuser:appuser configuration ./configuration
 COPY --chown=appuser:appuser invoice_processing ./invoice_processing
 
-# Install dependencies into a virtual environment
-RUN uv venv && \
-    uv sync --frozen --no-dev
+# Activate the venv for subsequent commands
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Expose the port the app runs on
 EXPOSE 8000
 
-# Start server with basic configuration for debugging
-CMD ["/bin/bash", "-c", "source .venv/bin/activate && uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000} --log-level debug"]
+# Start server. Using gunicorn as it's a more robust production server.
+# The --chdir flag solves Python's module path issues when running from root.
+CMD ["gunicorn", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:${PORT:-8000}", "--timeout", "120", "--chdir", "/app", "app:app"]

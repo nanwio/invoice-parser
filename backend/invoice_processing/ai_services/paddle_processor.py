@@ -29,78 +29,88 @@ class PaddleProcessor:
         """
         self.config_type = config_type
         self.ocr_engine = self._initialize_ocr_engine(config_type)
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.executor = ThreadPoolExecutor(max_workers=1)  # Reduce to prevent memory corruption
 
     def _initialize_ocr_engine(self, config_type: str) -> PaddleOCR:
         """Initialize OCR engine with optimized configuration based on type."""
         
         # Base optimized configuration
         base_config = {
-            # HIGH PERFORMANCE SETTINGS
-            'enable_hpi': True,              # High Performance Inference (3.0+)
-            'enable_mkldnn': True,           # MKL-DNN for 2-3x CPU speedup
-            'cpu_threads': 8,                # Maximum CPU threads
-            
             # GENERAL SETTINGS
-            'use_gpu': False,                # Explicitly CPU
-            'lang': 'es',                    # Spanish only
-            'show_log': False,               # No logs in production
-            'use_space_char': True,          # Better text spacing
+            'lang': 'es',
+
+            # DETECTION OPTIMIZATION
+            'text_det_thresh': 0.2,           # Same as det_db_thresh
+            'text_det_box_thresh': 0.4,       # Same as det_db_box_thresh
+            'text_det_unclip_ratio': 1.6,     # Same as det_db_unclip_ratio
+            'text_det_limit_side_len': 2000,  # Max image dimension
+
+            # RECOGNITION OPTIMIZATION
+            'text_recognition_batch_size': 8,  # Same as rec_batch_num
+            'text_rec_score_thresh': 0.5,     # Confidence threshold
+
+            # DISABLE UNUSED FEATURES FOR SPEED
+            'use_doc_orientation_classify': False,  # Same as use_angle_cls
+            'use_doc_unwarping': False,            # Disable document unwarping
+            'use_textline_orientation': False,     # Disable text orientation
+
+            'return_word_box': False,              # Only line boxes, not words
         }
         
         # Configuration variants
         configs = {
             "ultra_fast": {
                 **base_config,
-                # DETECTION - Ultra Fast
-                'det_db_thresh': 0.15,       # Very permissive
-                'det_db_box_thresh': 0.35,   # Low filtering
-                'det_db_unclip_ratio': 1.4,  # Minimal expansion
-                'det_max_candidates': 500,   # Fewer candidates
-                
-                # RECOGNITION - Ultra Fast
-                'rec_batch_num': 12,         # Large batch
-                'max_text_length': 35,       # Shorter text limit
-                'rec_image_shape': "3, 32, 256",  # Smaller height
-                
-                # CLASSIFICATION - Disabled for speed
-                'use_angle_cls': False,      # No rotation correction
+                # ULTRA FAST DETECTION - 1.8-2.2s target
+                'text_det_thresh': 0.15,          # Very permissive
+                'text_det_box_thresh': 0.35,      # Low filtering
+                'text_det_unclip_ratio': 1.4,     # Minimal expansion
+                'text_det_limit_side_len': 1600,  # Smaller max size
+
+                # ULTRA FAST RECOGNITION
+                'text_recognition_batch_size': 12, # Large batch
+                'text_rec_score_thresh': 0.4,     # Lower threshold
+
+                # DISABLE ALL EXTRAS
+                'use_doc_orientation_classify': False,
+                'use_doc_unwarping': False,
+                'use_textline_orientation': False,
             },
             
             "balanced": {
                 **base_config,
-                # DETECTION - Balanced
-                'det_db_thresh': 0.2,        # Good balance
-                'det_db_box_thresh': 0.4,    # Moderate filtering
-                'det_db_unclip_ratio': 1.6,  # Moderate expansion
-                'det_max_candidates': 700,   # Moderate candidates
-                
-                # RECOGNITION - Balanced
-                'rec_batch_num': 8,          # Medium batch
-                'max_text_length': 40,       # Invoice-appropriate
-                'rec_image_shape': "3, 32, 320",  # Standard height
-                
-                # CLASSIFICATION - Conditional
-                'use_angle_cls': True,       # Enable if needed
-                'cls_thresh': 0.8,          # High confidence threshold
+                # BALANCED DETECTION - 2.2-2.8s target
+                'text_det_thresh': 0.2,           # Good balance
+                'text_det_box_thresh': 0.4,       # Moderate filtering
+                'text_det_unclip_ratio': 1.6,     # Moderate expansion
+                'text_det_limit_side_len': 2000,  # Standard max size
+
+                # BALANCED RECOGNITION
+                'text_recognition_batch_size': 8, # Medium batch
+                'text_rec_score_thresh': 0.5,     # Standard threshold
+
+                # CONDITIONAL CLASSIFICATION
+                'use_doc_orientation_classify': True,  # Enable if needed
+                'use_doc_unwarping': False,           # Still disabled for speed
+                'use_textline_orientation': False,    # Still disabled
             },
             
             "high_quality": {
                 **base_config,
-                # DETECTION - High Quality
-                'det_db_thresh': 0.3,        # More strict
-                'det_db_box_thresh': 0.5,    # More filtering
-                'det_db_unclip_ratio': 2.0,  # Standard expansion
-                'det_max_candidates': 1000,  # More candidates
-                
-                # RECOGNITION - High Quality
-                'rec_batch_num': 6,          # Smaller batch for quality
-                'max_text_length': 50,       # Longer text
-                'rec_image_shape': "3, 32, 320",
-                
-                # CLASSIFICATION - Full
-                'use_angle_cls': True,       # Full rotation correction
-                'cls_thresh': 0.7,          # Lower threshold
+                # HIGH QUALITY DETECTION - 2.8-3.5s target
+                'text_det_thresh': 0.3,           # More strict
+                'text_det_box_thresh': 0.5,       # More filtering
+                'text_det_unclip_ratio': 2.0,     # Standard expansion
+                'text_det_limit_side_len': 2500,  # Larger max size
+
+                # HIGH QUALITY RECOGNITION
+                'text_recognition_batch_size': 6, # Smaller batch for quality
+                'text_rec_score_thresh': 0.6,     # Higher threshold
+
+                # FULL CLASSIFICATION
+                'use_doc_orientation_classify': True,  # Full rotation correction
+                'use_doc_unwarping': True,            # Enable for quality
+                'use_textline_orientation': True,     # Enable for quality
             }
         }
         
@@ -178,7 +188,7 @@ class PaddleProcessor:
         
         def _ocr_sync(img):
             np_img = self._optimize_image_for_ocr(img)
-            result = self.ocr_engine.ocr(np_img, cls=self.config_type != "ultra_fast")
+            result = self.ocr_engine.ocr(np_img)
             
             if result and result[0]:
                 return [line[1][0] for line in result[0] if line[1][1] > 0.5]  # Filter low confidence

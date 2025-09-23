@@ -36,7 +36,7 @@ steps:
       - '--update-env-vars'
       - 'ENVIRONMENT=production,GEMINI_MODEL_NAME=gemini-2.5-flash,REDIS_URL=redis://default:tFufJcQJUsWWzZ9lGUMF22Kv2LeSUk7B@redis-11003.c328.europe-west3-1.gce.redns.redis-cloud.com:11003'
       - '--update-secrets'
-      - 'GEMINI_API_KEY=GEMINIAPIKEY:latest,SECRET_KEY=SECRETKEY:latest'
+      - 'GEMINI_API_KEY=GEMINIAPIKEY:latest,JWT_SECRET_KEY=SECRETKEY:latest'
 
 images:
   - 'gcr.io/$PROJECT_ID/invoice-parser:$COMMIT_SHA'
