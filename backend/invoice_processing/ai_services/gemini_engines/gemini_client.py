@@ -98,13 +98,12 @@ class GeminiClient:
             logger.error(f"Gemini extraction failed: {e}")
             return None
 
-    async def extract_from_text(self, text: str, prompt: str) -> Optional[str]:
+    async def extract_from_text(self, full_prompt: str) -> Optional[str]:
         """
-        Extracts structured data from text using Gemini.
+        Extracts structured data from a full prompt (instructions + text) using Gemini.
 
         Args:
-            text: The input text to process.
-            prompt: The prompt to guide the extraction.
+            full_prompt: The complete prompt including instructions and the text to process.
 
         Returns:
             Structured text or None.
@@ -114,7 +113,7 @@ class GeminiClient:
                 return None
 
         try:
-            response = await self._model.generate_content_async([prompt, text])
+            response = await self._model.generate_content_async(full_prompt)
 
             if response and response.text:
                 return response.text.strip()

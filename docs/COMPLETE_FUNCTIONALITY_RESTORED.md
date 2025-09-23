@@ -57,7 +57,7 @@ backend_clean/
 │   │   └── donut_processor.py                # 106 líneas - DONUT OCR
 │   ├── parsing/
 │   │   ├── pdf_to_data.py                    # 109 líneas - Parsing base
-│   │   └── multi_mode_processor.py           # 124 líneas - 3 modos
+│   │   └── invoice_pipeline.py           # 124 líneas - 3 modos
 │   ├── validation/
 │   │   └── invoice_checker.py                # 130 líneas - Validación
 │   └── caching/                              # 🆕 SISTEMA CACHE
@@ -123,7 +123,7 @@ frontend_clean/
 ### **✅ ESTRUCTURA AUTOEXPLICATIVA:**
 - `ai_services/` → Servicios de AI
 - `gemini_processor.py` → Procesamiento con Gemini
-- `multi_mode_processor.py` → Coordinador de 3 modos
+- `invoice_pipeline.py` → Coordinador de 3 modos
 - `redis_cache.py` → Sistema de cache
 
 ### **✅ FUNCIONALIDAD COMPLETA:**
