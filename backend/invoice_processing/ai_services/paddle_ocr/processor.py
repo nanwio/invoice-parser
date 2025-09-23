@@ -3,7 +3,7 @@ import gc
 from loguru import logger
 from paddleocr import PaddleOCR
 from threading import Lock
-from typing import Optional, Any
+from typing import Optional, Any, List, Dict
 
 from .config import PaddleConfig
 from .image_handler import ImageHandler
@@ -58,29 +58,26 @@ class PaddleProcessor:
         self.image_handler = ImageHandler()
         self.ocr_executor = OcrExecutor(self.ocr_engine, self.engine_lock, self.image_handler)
 
-    async def process_pdf_async(self, pdf_path: str) -> str:
+    async def process_pdf_async(self, pdf_path: str) -> List[Dict[str, Any]]:
         """
-        Processes an invoice PDF from a file path asynchronously.
+        Processes a PDF and returns structured text page by page.
         """
         logger.info(f"Starting async OCR for PDF: {pdf_path}")
         try:
             image_generator = self.image_handler.convert_pdf_to_images(pdf_path)
-            all_text_parts = await self.ocr_executor.run_ocr_on_images_parallel(image_generator)
-            return " ".join(all_text_parts)
+            return await self.ocr_executor.run_ocr_on_images_parallel(image_generator)
         finally:
             gc.collect()
 
-    async def process_image_async(self, image_bytes: bytes) -> str:
+    async def process_image_async(self, image_bytes: bytes) -> List[Dict[str, Any]]:
         """
-        Processes a single invoice image from bytes asynchronously.
+        Processes a single image and returns structured text.
         """
         logger.info("Starting async OCR for single image")
         try:
             image = self.image_handler.convert_bytes_to_image(image_bytes)
-            # The executor expects a generator, so we create one for the single image
             image_generator = (img for img in [image])
-            all_text_parts = await self.ocr_executor.run_ocr_on_images_parallel(image_generator)
-            return " ".join(all_text_parts)
+            return await self.ocr_executor.run_ocr_on_images_parallel(image_generator)
         finally:
             gc.collect()
 

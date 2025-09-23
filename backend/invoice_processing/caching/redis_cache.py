@@ -1,7 +1,5 @@
-# Copyright 2024 Artificial Intelligence Labs, SL
-
 """
-Redis caching service - SIMPLE and FOCUSED
+Redis caching service
 One responsibility: cache invoice processing results
 """
 
@@ -43,10 +41,6 @@ class InvoiceCacheService:
         except Exception as e:
             logger.warning(f"Redis connection failed: {e}")
             self._redis_client = None
-
-    def generate_file_hash(self, file_bytes: bytes) -> str:
-        """Generate unique hash for PDF file."""
-        return hashlib.sha256(file_bytes).hexdigest()
 
     async def get_cached_invoice(self, file_hash: str) -> Optional[Invoice]:
         """

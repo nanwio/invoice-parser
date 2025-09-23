@@ -1,7 +1,5 @@
-# Copyright 2024 Artificial Intelligence Labs, SL
-
 """
-JWT Authentication - SIMPLE and FOCUSED
+JWT Authentication
 One responsibility: handle JWT token authentication
 """
 
@@ -15,7 +13,6 @@ from configuration.app_settings import app_settings
 class JWTAuthenticator:
     """
     Simple JWT authentication handler.
-    Validates tokens and extracts user information.
     """
 
     def __init__(self):
@@ -56,11 +53,8 @@ class JWTAuthenticator:
                 detail="Invalid token"
             )
 
-
-# Global authenticator instance
 jwt_authenticator = JWTAuthenticator()
 
-# Convenience function for dependency injection
 def get_current_user(
     credentials: JwtAuthorizationCredentials = Security(jwt_authenticator.access_security)
 ) -> dict[str, str]:

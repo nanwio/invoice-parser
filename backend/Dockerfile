@@ -23,14 +23,14 @@ RUN groupadd --system --gid 1001 appuser && \
 WORKDIR /app
 
 # Copy dependency files and install them into a virtual environment
-COPY --chown=appuser:appuser pyproject.toml uv.lock ./
+COPY --chown=appuser:appuser backend/pyproject.toml backend/uv.lock ./
 RUN uv venv && \
     uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
 
 # --- Pre-cache PaddleOCR models ---
 # This significantly reduces cold start time in production.
-COPY --chown=appuser:appuser scripts/cache_models.py ./scripts/
+COPY --chown=appuser:appuser backend/scripts/cache_models.py ./scripts/
 USER appuser
 RUN python scripts/cache_models.py
 USER root
@@ -66,10 +66,10 @@ USER appuser
 # Copy the venv, application code, and the warmed-up model cache
 COPY --from=builder --chown=appuser:appuser /app/.venv ./.venv
 COPY --from=builder --chown=appuser:appuser /home/appuser/.paddleocr /home/appuser/.paddleocr
-COPY --chown=appuser:appuser *.py ./
-COPY --chown=appuser:appuser api ./api
-COPY --chown=appuser:appuser configuration ./configuration
-COPY --chown=appuser:appuser invoice_processing ./invoice_processing
+COPY --chown=appuser:appuser backend/*.py ./
+COPY --chown=appuser:appuser backend/api ./api
+COPY --chown=appuser:appuser backend/configuration ./configuration
+COPY --chown=appuser:appuser backend/invoice_processing ./invoice_processing
 
 # Activate the venv for subsequent commands
 ENV PATH="/app/.venv/bin:$PATH"

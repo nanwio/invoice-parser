@@ -1,7 +1,5 @@
-# Copyright 2024 Artificial Intelligence Labs, SL
-
 """
-Invoice upload and parsing API - SIMPLE and FOCUSED
+Invoice upload and parsing API
 One endpoint: upload PDF, get structured invoice data
 """
 
@@ -68,13 +66,12 @@ async def upload_and_parse_invoice(
         
         logger.info(f"[Job {job_id}] PDF Cache MISS. Starting full processing pipeline.")
     else:
-        file_hash = None # No hashing for images yet
+        file_hash = None
         logger.info(f"[Job {job_id}] Image file detected. Starting full processing pipeline.")
 
     processor = InvoiceProcessor()
     invoice_data, processing_results = await processor.process_invoice(file_bytes, file.content_type)
     
-    # Cache the result if it was a PDF
     if file_hash:
         await invoice_cache.cache_invoice(file_hash, invoice_data)
     

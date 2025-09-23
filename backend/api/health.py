@@ -1,8 +1,5 @@
-# Copyright 2024 Artificial Intelligence Labs, SL
-
 """
-Health check endpoint - SIMPLE
-One responsibility: check if the API is alive
+Health check endpoint
 """
 
 from fastapi import APIRouter

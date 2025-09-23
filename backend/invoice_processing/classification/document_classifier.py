@@ -1,7 +1,5 @@
-# Copyright 2024 Artificial Intelligence Labs, SL
-
 """
-Document classifier - SIMPLE and FOCUSED
+Document classifier
 One responsibility: classify if document is an invoice or not
 """
 
@@ -72,7 +70,6 @@ class DocumentClassifier:
                     reason="Classification failed - assuming invoice"
                 )
 
-            # Prepare PDF data
             pdf_data = {
                 "inline_data": {
                     "mime_type": "application/pdf",

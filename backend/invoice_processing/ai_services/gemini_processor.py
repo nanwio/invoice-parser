@@ -1,132 +1,101 @@
-# Copyright 2024 Artificial Intelligence Labs, SL
-
 """
-Gemini AI processor - SIMPLE and FOCUSED
-One responsibility: communicate with Gemini AI for invoice extraction
+Gemini AI processor
 """
 
+import instructor
 from typing import Tuple, Dict, Any, Optional
 from loguru import logger
+import google.generativeai as genai
 
 from invoice_processing.models.invoice_data import Invoice
-from invoice_processing.ai_services.gemini_engines.gemini_client import GeminiClient
-from invoice_processing.ai_services.gemini_engines.invoice_parser import invoice_parser
-from invoice_processing.ai_services.gemini_engines.prompts import STRUCTURING_PROMPT
 from configuration.app_settings import app_settings
 
+instructor.patch()
 
 class GeminiInvoiceProcessor:
     """
-    Processes invoices using Google Gemini AI.
-    Simple, reliable implementation.
+    Processes invoices using Google Gemini, guided by Pydantic models with Instructor.
     """
 
     def __init__(self):
-        """Initialize Gemini processor."""
-        self._client = GeminiClient(
-            api_key=app_settings.ai_model.GEMINI_API_KEY,
+        """Initialize the Gemini processor and the instructor client."""
+        self._client = genai.GenerativeModel(
             model_name=app_settings.ai_model.GEMINI_MODEL_NAME
         )
+        genai.configure(api_key=app_settings.ai_model.GEMINI_API_KEY)
 
     async def _warm_up_connection(self):
-        """Pre-warms the Gemini client to reduce latency on the first call."""
-        if not self._client.is_configured():
-            logger.debug("Warming up Gemini client connection...")
-            self._client.configure()
-
-    async def extract_invoice_data(self, pdf_bytes: bytes, mode: str = "standard") -> Tuple[Optional[Invoice], Dict[str, Any]]:
-        """
-        Extract structured invoice data from PDF using Gemini.
-
-        Args:
-            pdf_bytes: Raw PDF file bytes
-            mode: Processing mode ('lightning', 'fast', 'enhanced')
-
-        Returns:
-            Tuple of (Invoice object or None, processing metadata)
-        """
-        logger.info(f"Processing invoice with Gemini in {mode} mode")
-
+        """A simple check to ensure the API key is valid during startup."""
         try:
-            # Configure client if needed
-            if not self._client.configure():
-                return None, {"success": False, "error": "Gemini client configuration failed"}
-
-            # Get prompt for mode
-            prompt = self._get_prompt_for_mode(mode)
-
-            # Extract text with Gemini
-            extracted_text = await self._client.extract_from_pdf(pdf_bytes, prompt)
-            if not extracted_text:
-                return None, {"success": False, "error": "No text extracted from PDF"}
-
-            # Parse text to structured data
-            parsed_data = invoice_parser.parse_to_invoice_data(extracted_text)
-            if not parsed_data:
-                return None, {"success": False, "error": "Failed to parse extracted text"}
-
-            # Convert to Invoice object
-            invoice = self._convert_to_invoice(parsed_data)
-
-            metadata = {
-                "success": True,
-                "mode_used": mode,
-                "model": app_settings.ai_model.GEMINI_MODEL_NAME,
-                "confidence": parsed_data.get("confidence", 0.8)
-            }
-
-            return invoice, metadata
-
+            # A lightweight call to verify credentials
+            await genai.GenerativeModel.count_tokens_async(self._client, "warmup")
+            logger.info("Gemini connection warmed up successfully.")
         except Exception as e:
-            logger.error(f"Gemini processing failed: {e}")
-            return None, {"success": False, "error": str(e)}
+            logger.error(f"Gemini warm-up failed. Check API key and configuration. Error: {e}")
 
     async def structure_invoice_data_from_text(self, ocr_text: str) -> Tuple[Optional[Invoice], Dict[str, Any]]:
         """
-        Structures invoice data from OCR text using Gemini.
-
-        Args:
-            ocr_text: The text extracted from the invoice by an OCR engine.
-
-        Returns:
-            A tuple of (Invoice object or None, processing metadata)
+        Structures invoice data from OCR text, returning a Pydantic Invoice object.
         """
-        logger.info("Structuring invoice data from OCR text with Gemini")
-
+        logger.info("Structuring invoice data from OCR text with Gemini and Instructor.")
+        
         try:
-            if not self._client.is_configured() and not self._client.configure():
-                return None, {"success": False, "error": "Gemini client configuration failed"}
-
-            prompt = self._get_structuring_prompt()
-
-            structured_text = await self._client.extract_from_text(f"{prompt}\n{ocr_text}")
-            if not structured_text:
-                return None, {"success": False, "error": "Gemini could not structure the text"}
-
-            parsed_data = invoice_parser.parse_to_invoice_data(structured_text)
-            if not parsed_data:
-                return None, {"success": False, "error": "Failed to parse structured text"}
-
-            invoice = self._convert_to_invoice(parsed_data)
-
+            full_prompt = self._get_structuring_prompt() + ocr_text
+            
+            # Use instructor to get a Pydantic object directly
+            invoice_response = await self._client.generate_content_async(
+                full_prompt,
+                response_model=Invoice,
+                request_options={"max_retries": 2}
+            )
+            
             metadata = {
                 "success": True,
-                "mode_used": "surya_gemini",
                 "model": app_settings.ai_model.GEMINI_MODEL_NAME,
-                "confidence": parsed_data.get("confidence", 0.9) # Higher confidence as it's structured
             }
-
-            return invoice, metadata
+            return invoice_response, metadata
 
         except Exception as e:
-            logger.error(f"Gemini structuring failed: {e}")
+            logger.error(f"Gemini structuring with Instructor failed: {e}")
             return None, {"success": False, "error": str(e)}
 
     def _get_structuring_prompt(self) -> str:
-        """Get the optimized prompt for structuring OCR text."""
-        return STRUCTURING_PROMPT
+        """
+        Get the detailed, structured prompt that guides the LLM to output
+        data matching the `Invoice` Pydantic model.
+        """
+        return """
+        [SYSTEM]
+        You are a world-class AI engine for invoice processing. Your task is to convert raw OCR text from any invoice into a structured JSON object that strictly adheres to the provided Pydantic model schema.
 
-    def _convert_to_invoice(self, parsed_data: Dict[str, Any]) -> Invoice:
-        """Convert parsed data to Invoice object."""
-        from invoice_processing.utilities.invoice_builder import invoice_builder
-        return invoice_builder.build_from_data(parsed_data)
+        [TASK]
+        1.  **Analyze**: Carefully read the OCR text, which may be spread across multiple pages indicated by "[INICIO PÁGINA X]" markers.
+        2.  **Extract**: Identify and extract all fields defined in the [FIELD DEFINITIONS] section.
+        3.  **Structure**: Format the data into a valid JSON object matching the `Invoice` model. Pay close attention to nested structures like `vendor`, `customer`, `financials`, and `items`.
+
+        [RULES]
+        - **Strict Adherence**: Only extract information present in the text. DO NOT invent or infer data.
+        - **Handle Missing Data**: If a field is not found, its value MUST be `null`. Do not omit keys.
+        - **Data Types**: All monetary values must be numbers (float or int). Quantities should be integers. Dates must be in YYYY-MM-DD format if possible.
+        - **Completeness**: Extract all line items.
+
+        [FIELD DEFINITIONS]
+        - `vendor`: The company issuing the invoice. Includes `name`, `tax_id`, `email`, `address`.
+        - `customer`: The company receiving the invoice. Includes `name`, `tax_id`, `email`, `address`.
+        - `financials`: A nested object containing all monetary details.
+            - `currency`: The currency of the invoice (e.g., "EUR", "USD").
+            - `subtotal`: The total amount before taxes.
+            - `tax`: A nested object for tax details.
+                - `type`: The type of tax (e.g., "IVA", "IGIC").
+                - `rate`: The tax rate as a percentage (e.g., 21.0 for 21%).
+                - `amount`: The total tax amount.
+            - `total_amount`: The final, total amount to be paid.
+        - `items`: A list of all line items. Each item is an object with `description`, `quantity`, `unit_price`, and `line_total`.
+        - `metadata`: A nested object for invoice metadata.
+            - `invoice_number`: The unique identifier for the invoice.
+            - `issue_date`: The date the invoice was created.
+            - `due_date`: The date payment is due.
+        - `notes`: Any additional text or comments.
+
+        [OCR TEXT TO PROCESS]
+        """

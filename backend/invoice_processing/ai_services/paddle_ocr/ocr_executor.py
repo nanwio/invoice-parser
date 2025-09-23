@@ -1,4 +1,4 @@
-from typing import List, Generator
+from typing import List, Generator, Dict, Any, Tuple
 from PIL import Image
 from paddleocr import PaddleOCR
 import asyncio
@@ -27,18 +27,14 @@ class OcrExecutor:
         self.image_handler = image_handler
         self.executor = ThreadPoolExecutor(max_workers=4)
 
-    async def _run_ocr_on_image_async(self, image: Image.Image) -> List[str]:
+    async def _run_ocr_on_image_async(self, page_index: int, image: Image.Image) -> Tuple[int, List[str]]:
         """
-        Run OCR on a single image asynchronously in a thread pool,
-        ensuring thread-safe access to the OCR engine.
+        Run OCR on a single image, returning the page index and extracted text lines.
         """
         loop = asyncio.get_event_loop()
         
         def _ocr_sync(img):
             np_img = self.image_handler.optimize_image_for_ocr(img)
-            
-            # This lock prevents concurrent access to the non-thread-safe
-            # ocr_engine, which is critical under high load.
             with self.engine_lock:
                 result = self.ocr_engine.ocr(np_img, cls=False)
             
@@ -46,19 +42,31 @@ class OcrExecutor:
                 return [line[1][0] for line in result[0] if line[1][1] > 0.5]
             return []
         
-        return await loop.run_in_executor(self.executor, _ocr_sync, image)
+        text_lines = await loop.run_in_executor(self.executor, _ocr_sync, image)
+        return (page_index, text_lines)
 
-    async def run_ocr_on_images_parallel(self, image_generator: Generator[Image.Image, None, None]) -> List[str]:
+    async def run_ocr_on_images_parallel(self, image_generator: Generator[Image.Image, None, None]) -> List[Dict[str, Any]]:
         """
-        Run OCR on a generator of images in parallel.
+        Run OCR on a generator of images, returning structured page-by-page results.
         """
-        tasks = [self._run_ocr_on_image_async(image) for image in image_generator]
+        tasks = [
+            self._run_ocr_on_image_async(i, image) 
+            for i, image in enumerate(image_generator, start=1)
+        ]
         
-        page_results = await asyncio.gather(*tasks)
+        # Results will be a list of tuples: [(page_index, text_lines), ...]
+        page_results_tuples = await asyncio.gather(*tasks)
         
-        # Flatten the list of lists into a single list of text lines
-        all_text_lines = [line for page in page_results for line in page]
-        return all_text_lines
+        # Sort results by page index to ensure correct order
+        page_results_tuples.sort(key=lambda x: x[0])
+        
+        # Format into the final structured list
+        structured_results = [
+            {"page_number": page_index, "text": " ".join(text_lines)}
+            for page_index, text_lines in page_results_tuples
+        ]
+        
+        return structured_results
 
     def shutdown(self):
         """Shutdown the thread pool executor."""

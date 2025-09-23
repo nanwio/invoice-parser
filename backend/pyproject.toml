@@ -5,7 +5,26 @@ description = "Automagically parse invoices and receipts with AI."
 # readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "instructor[google-genai]>=1.9.0",
+    "fastapi>=0.112.0",
+    "uvicorn>=0.30.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    "redis>=5.0.0",
+    "loguru>=0.7.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=5.4.0",
+    "python-multipart>=0.0.9",
+    "google-generativeai>=0.7.0",
+    "pillow>=10.5.0",
+    "paddleocr>=2.8.0",
+    "paddlepaddle>=2.6.1",
+    "opencv-python-headless>=4.8.0",
+    "pdf2image>=1.17.0",
+    "instructor>=1.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
     "rich>=14.0.0",
     "pydantic>=2.10.2",
     "pdf2image>=1.17.0",

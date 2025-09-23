@@ -1,8 +1,5 @@
 """
 Centralized Prompts for Gemini Engines.
-
-This module consolidates all complex prompts used for interacting with the Gemini API.
-Keeping prompts separate from the business logic improves maintainability and readability.
 """
 
 STRUCTURING_PROMPT = """[SYSTEM]

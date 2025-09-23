@@ -14,7 +14,6 @@ class PaddleConfig:
         logger.info("Loading PaddleOCR with ultra_fast configuration")
         
         # This configuration is fine-tuned for maximum CPU speed.
-        # Based on official documentation and performance testing.
         return {
             # High-Performance Inference Engine (HPI)
             'enable_hpi': True,

@@ -1,5 +1,3 @@
-# Copyright 2024 Artificial Intelligence Labs, SL
-
 """
 Document utilities - SIMPLE and FOCUSED
 One responsibility: handle document metadata and hashing
@@ -89,6 +87,4 @@ class DocumentUtilities:
                 page_size=DocumentPageSize(width=0, height=0)
             )
 
-
-# Global utilities instance
 document_utils = DocumentUtilities()

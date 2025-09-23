@@ -1,5 +1,3 @@
-# Copyright 2024 Artificial Intelligence Labs, SL
-
 """
 Gemini Client - SIMPLE and FOCUSED
 One responsibility: handle Gemini API communication
@@ -19,7 +17,6 @@ except ImportError:
 class GeminiClient:
     """
     Simple Gemini API client.
-    Under 100 lines, single responsibility.
     """
 
     def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):

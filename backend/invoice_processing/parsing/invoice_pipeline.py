@@ -1,5 +1,5 @@
 """
-Optimized Invoice processor - FAST and EFFICIENT
+Optimized Invoice processor
 One responsibility: coordinate the invoice processing pipeline
 """
 
@@ -30,7 +30,6 @@ class InvoiceProcessor:
         Initialize all required processors with a single, ultra-fast configuration.
         """
         self.gemini_processor = GeminiInvoiceProcessor()
-        # Hardcoding "ultra_fast" as it's now the only mode
         self.paddle_processor = create_paddle_processor("ultra_fast")
         self.validator = InvoiceValidator()
         
@@ -78,7 +77,7 @@ class InvoiceProcessor:
         start_time = time.perf_counter()
         logger.info(f"Starting invoice processing for content type: {content_type}")
 
-        ocr_text = ""
+        ocr_results_by_page = []
         preprocessing_time = 0.0
         temp_pdf_path = None
 
@@ -93,20 +92,25 @@ class InvoiceProcessor:
                 _, temp_pdf_path = await self._parallel_preprocessing(document_bytes)
                 preprocessing_time = time.perf_counter() - preprocessing_start
                 
-                ocr_text = await self.paddle_processor.process_pdf_async(temp_pdf_path)
+                ocr_results_by_page = await self.paddle_processor.process_pdf_async(temp_pdf_path)
             else:
                 # For images, process bytes directly
-                ocr_text = await self.paddle_processor.process_image_async(document_bytes)
+                ocr_results_by_page = await self.paddle_processor.process_image_async(document_bytes)
             
             ocr_time = time.perf_counter() - ocr_start
-            logger.info(f"OCR completed in {ocr_time:.2f}s, extracted {len(ocr_text)} characters")
+            
+            # Format the page-by-page results into a single string for the LLM
+            ocr_text_for_llm = self._format_ocr_results_for_llm(ocr_results_by_page)
+            
+            logger.info(f"OCR completed in {ocr_time:.2f}s, extracted {len(ocr_text_for_llm)} chars from "
+                        f"{len(ocr_results_by_page)} pages.")
 
             # Step 2: Structure text with Gemini (parallel with PDF cleanup if it exists)
             logger.info("Step 2/3: Structuring data with Gemini")
             structuring_start = time.perf_counter()
             
             gemini_task = asyncio.create_task(
-                self.gemini_processor.structure_invoice_data_from_text(ocr_text)
+                self.gemini_processor.structure_invoice_data_from_text(ocr_text_for_llm)
             )
             
             if temp_pdf_path:
@@ -153,6 +157,18 @@ class InvoiceProcessor:
         }
 
         return invoice, processing_results
+
+    def _format_ocr_results_for_llm(self, ocr_results: list[dict]) -> str:
+        """
+        Formats the structured OCR results into a single string with page delimiters.
+        """
+        formatted_parts = []
+        for result in ocr_results:
+            page_num = result.get("page_number", "N/A")
+            text = result.get("text", "")
+            formatted_parts.append(f"[INICIO PÁGINA {page_num}]\n{text}\n[FIN PÁGINA {page_num}]")
+        
+        return "\n\n".join(formatted_parts)
 
     async def _cleanup_temp_file(self, temp_path: str):
         """Clean up temporary file asynchronously."""

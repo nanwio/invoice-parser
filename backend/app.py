@@ -7,7 +7,7 @@ One responsibility: bootstrap the API server
 
 from fastapi import FastAPI
 from api.health import router as health_router
-from api.invoice_endpoints.upload_and_parse import router as invoice_router
+from api.endpoints.upload_and_parse import router as invoice_router
 
 # Create FastAPI app
 app = FastAPI(
