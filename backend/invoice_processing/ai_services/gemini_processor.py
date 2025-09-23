@@ -5,36 +5,29 @@ Gemini AI processor - SIMPLE and FOCUSED
 One responsibility: communicate with Gemini AI for invoice extraction
 """
 
-import base64
-import instructor
-from typing import Tuple, Dict, Any
-from google import genai
+from typing import Tuple, Dict, Any, Optional
 from loguru import logger
 
 from invoice_processing.models.invoice_data import Invoice
+from invoice_processing.ai_services.gemini_engines.gemini_client import GeminiClient
+from invoice_processing.ai_services.gemini_engines.invoice_parser import invoice_parser
 from configuration.app_settings import app_settings
 
 
 class GeminiInvoiceProcessor:
     """
     Processes invoices using Google Gemini AI.
-    Simple wrapper around Gemini API with instructor.
+    Simple, reliable implementation.
     """
 
     def __init__(self):
-        """Initialize Gemini client with optimal settings."""
-        self._setup_client()
-
-    def _setup_client(self):
-        """Set up Gemini client with instructor."""
-        self._client = genai.Client(api_key=app_settings.ai_model.GEMINI_API_KEY)
-        self._instructor = instructor.from_genai(
-            self._client,
-            mode=instructor.Mode.GENAI_TOOLS,
-            use_async=True
+        """Initialize Gemini processor."""
+        self._client = GeminiClient(
+            api_key=app_settings.ai_model.GEMINI_API_KEY,
+            model_name=app_settings.ai_model.GEMINI_MODEL_NAME
         )
 
-    async def extract_invoice_data(self, pdf_bytes: bytes, mode: str = "standard") -> Tuple[Invoice, Dict[str, Any]]:
+    async def extract_invoice_data(self, pdf_bytes: bytes, mode: str = "standard") -> Tuple[Optional[Invoice], Dict[str, Any]]:
         """
         Extract structured invoice data from PDF using Gemini.
 
@@ -43,43 +36,43 @@ class GeminiInvoiceProcessor:
             mode: Processing mode ('lightning', 'fast', 'enhanced')
 
         Returns:
-            Tuple of (Invoice object, processing metadata)
+            Tuple of (Invoice object or None, processing metadata)
         """
         logger.info(f"Processing invoice with Gemini in {mode} mode")
 
         try:
-            # Prepare PDF for Gemini
-            b64_pdf = base64.b64encode(pdf_bytes).decode()
+            # Configure client if needed
+            if not self._client.configure():
+                return None, {"success": False, "error": "Gemini client configuration failed"}
 
-            # Select prompt based on mode
+            # Get prompt for mode
             prompt = self._get_prompt_for_mode(mode)
 
-            # Process with Gemini
-            invoice = await self._instructor.chat.completions.create(
-                model=app_settings.ai_model.GEMINI_MODEL_NAME,
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        prompt,
-                        {"type": "application/pdf", "data": b64_pdf}
-                    ]
-                }],
-                response_model=Invoice,
-                temperature=app_settings.ai_model.GEMINI_TEMPERATURE,
-                max_tokens=app_settings.ai_model.GEMINI_MAX_TOKENS
-            )
+            # Extract text with Gemini
+            extracted_text = await self._client.extract_from_pdf(pdf_bytes, prompt)
+            if not extracted_text:
+                return None, {"success": False, "error": "No text extracted from PDF"}
+
+            # Parse text to structured data
+            parsed_data = invoice_parser.parse_to_invoice_data(extracted_text)
+            if not parsed_data:
+                return None, {"success": False, "error": "Failed to parse extracted text"}
+
+            # Convert to Invoice object
+            invoice = self._convert_to_invoice(parsed_data)
 
             metadata = {
                 "success": True,
                 "mode_used": mode,
-                "model": app_settings.ai_model.GEMINI_MODEL_NAME
+                "model": app_settings.ai_model.GEMINI_MODEL_NAME,
+                "confidence": parsed_data.get("confidence", 0.8)
             }
 
             return invoice, metadata
 
         except Exception as e:
             logger.error(f"Gemini processing failed: {e}")
-            raise
+            return None, {"success": False, "error": str(e)}
 
     def _get_prompt_for_mode(self, mode: str) -> str:
         """Get extraction prompt based on processing mode."""
@@ -105,3 +98,8 @@ class GeminiInvoiceProcessor:
             - All line items and financial totals
             - Tax information
             Balance of speed and accuracy."""
+
+    def _convert_to_invoice(self, parsed_data: Dict[str, Any]) -> Invoice:
+        """Convert parsed data to Invoice object."""
+        from invoice_processing.utilities.invoice_builder import invoice_builder
+        return invoice_builder.build_from_data(parsed_data)

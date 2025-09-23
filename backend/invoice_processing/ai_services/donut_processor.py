@@ -10,6 +10,8 @@ from typing import Tuple, Dict, Any, Optional
 from loguru import logger
 
 from invoice_processing.models.invoice_data import Invoice
+from invoice_processing.ai_services.ocr_engines.donut_model import donut_model
+from invoice_processing.ai_services.ocr_engines.pdf_converter import pdf_converter
 
 
 class DonutOCRProcessor:
@@ -19,9 +21,8 @@ class DonutOCRProcessor:
     """
 
     def __init__(self):
-        """Initialize DONUT model (lazy loading)."""
-        self._model_loaded = False
-        self._model = None
+        """Initialize DONUT processor."""
+        pass
 
     async def extract_invoice_data(self, pdf_bytes: bytes) -> Tuple[Optional[Invoice], Dict[str, Any]]:
         """
@@ -36,14 +37,14 @@ class DonutOCRProcessor:
         logger.info("Processing invoice with DONUT OCR")
 
         try:
-            # Ensure model is loaded
-            await self._ensure_model_loaded()
+            # Load model if needed
+            if not await donut_model.load_model():
+                return None, {"success": False, "method": "donut_ocr", "error": "Model loading failed"}
 
             # Process PDF with DONUT
-            # Note: This is a placeholder - DONUT integration would go here
             extracted_data = await self._process_with_donut(pdf_bytes)
 
-            if extracted_data:
+            if extracted_data and extracted_data.get("confidence", 0) > 0.5:
                 invoice = self._convert_to_invoice(extracted_data)
                 metadata = {
                     "success": True,
@@ -52,56 +53,37 @@ class DonutOCRProcessor:
                 }
                 return invoice, metadata
             else:
-                return None, {"success": False, "method": "donut_ocr", "error": "No data extracted"}
+                return None, {"success": False, "method": "donut_ocr", "error": "Low confidence extraction"}
 
         except Exception as e:
             logger.error(f"DONUT processing failed: {e}")
             return None, {"success": False, "method": "donut_ocr", "error": str(e)}
 
-    async def _ensure_model_loaded(self):
-        """Load DONUT model if not already loaded."""
-        if self._model_loaded:
-            return
-
-        logger.info("Loading DONUT model...")
-        # Placeholder for DONUT model loading
-        # self._model = load_donut_model()
-        self._model_loaded = True
-        logger.info("DONUT model loaded")
-
     async def _process_with_donut(self, pdf_bytes: bytes) -> Optional[Dict[str, Any]]:
         """
         Process PDF with DONUT model.
-        Placeholder for actual DONUT processing.
+        Real implementation using OCR engines.
         """
-        # Simulate processing time
-        await asyncio.sleep(0.1)
+        try:
+            # Convert PDF to images
+            images = pdf_converter.pdf_to_images(pdf_bytes)
+            if not images:
+                logger.warning("No images extracted from PDF")
+                return None
 
-        # Placeholder return - would contain actual DONUT extraction
-        return {
-            "vendor_name": "Extracted Vendor",
-            "total_amount": 100.0,
-            "confidence": 0.85
-        }
+            # Process first page (can be enhanced for multi-page)
+            first_page = pdf_converter.resize_for_donut(images[0])
+
+            # Extract text with DONUT
+            extracted_data = await donut_model.extract_text(first_page)
+
+            return extracted_data
+
+        except Exception as e:
+            logger.error(f"DONUT processing error: {e}")
+            return None
 
     def _convert_to_invoice(self, donut_data: Dict[str, Any]) -> Invoice:
         """Convert DONUT extracted data to Invoice object."""
-        from invoice_processing.models.invoice_data import InvoiceParty, InvoiceFinancials, InvoiceTax
-
-        # Create basic invoice structure from DONUT data
-        vendor = InvoiceParty(name=donut_data.get("vendor_name", "Unknown Vendor"))
-        customer = InvoiceParty(name=donut_data.get("customer_name", "Unknown Customer"))
-
-        tax = InvoiceTax(type="IVA", rate=21.0, amount=donut_data.get("tax_amount", 0.0))
-        financials = InvoiceFinancials(
-            subtotal=donut_data.get("subtotal", 0.0),
-            tax=tax,
-            total_amount=donut_data.get("total_amount", 0.0)
-        )
-
-        return Invoice(
-            vendor=vendor,
-            customer=customer,
-            financials=financials,
-            items=[]  # DONUT might not extract detailed line items
-        )
+        from invoice_processing.utilities.invoice_builder import invoice_builder
+        return invoice_builder.build_from_data(donut_data)
