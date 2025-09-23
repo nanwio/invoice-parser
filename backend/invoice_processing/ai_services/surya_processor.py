@@ -3,8 +3,9 @@ from typing import List, Tuple
 from pdf2image import convert_from_path
 from PIL import Image
 from surya.ocr import run_ocr
-from surya.model.detection import segformer
-from surya.model.recognition import load_model, load_processor
+from surya.model.detection.segformer import load_model as load_det_model, load_processor as load_det_processor
+from surya.model.recognition.model import load_model as load_rec_model
+from surya.model.recognition.processor import load_processor as load_rec_processor
 from surya.postprocessing.text import draw_text_on_image
 import torch
 
@@ -26,14 +27,14 @@ class SuryaProcessor:
 
     def _load_detection_models(self):
         """Loads the text detection models."""
-        det_processor = segformer.load_processor()
-        det_model = segformer.load_model()
+        det_processor = load_det_processor()
+        det_model = load_det_model()
         return det_processor, det_model
 
     def _load_recognition_models(self):
         """Loads the text recognition models."""
-        rec_model = load_model()
-        rec_processor = load_processor()
+        rec_model = load_rec_model()
+        rec_processor = load_rec_processor()
         return rec_model, rec_processor
 
     def _convert_pdf_to_images(self, pdf_path: str) -> List[Image.Image]:
