@@ -43,6 +43,7 @@ dependencies = [
     "reportlab>=4.0.0",
     "pyjwt>=2.10.1",
     "google-generativeai>=0.8.5",
+    "huggingface-hub>=0.26.0",
 ]
 
 [tool.pdm.build]

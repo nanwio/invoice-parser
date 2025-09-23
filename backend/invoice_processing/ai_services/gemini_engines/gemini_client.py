@@ -71,14 +71,22 @@ class GeminiClient:
                 return None
 
         try:
-            # Prepare PDF data
-            pdf_data = {
-                "mime_type": "application/pdf",
-                "data": pdf_bytes
+            # Prepare PDF data for Gemini API
+            import base64
+
+            # Use genai.upload_file for better reliability
+            pdf_b64 = base64.b64encode(pdf_bytes).decode()
+
+            # Create proper Gemini content format
+            pdf_part = {
+                "inline_data": {
+                    "mime_type": "application/pdf",
+                    "data": pdf_b64
+                }
             }
 
-            # Generate content
-            response = await self._model.generate_content_async([prompt, pdf_data])
+            # Generate content with proper format
+            response = await self._model.generate_content_async([prompt, pdf_part])
 
             if response and response.text:
                 return response.text.strip()
