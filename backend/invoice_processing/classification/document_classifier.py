@@ -53,7 +53,7 @@ class DocumentClassifier:
         logger.info("Classifying document type")
 
         try:
-            b64 = base64.b64encode(document_bytes).decode()
+            pdf_data = PDF(data=document_bytes)
 
             # Simple classification prompt
             prompt = """Analyze this document and determine if it's an invoice.
@@ -74,17 +74,14 @@ Return:
 
             messages = [{
                 "role": "user",
-                "content": [
-                    prompt,
-                    {"type": "application/pdf", "data": b64}
-                ]
+                "content": [prompt, pdf_data]
             }]
 
             classification = await self._instructor.chat.completions.create(
                 model=app_settings.ai_model.GEMINI_MODEL_NAME,
                 messages=messages,
                 response_model=DocumentClassification,
-                temperature=0.1  # Low temperature for consistent classification
+                temperature=0.3
             )
 
             logger.info(f"Document classified as: {classification.document_type} (confidence: {classification.confidence:.2f})")
