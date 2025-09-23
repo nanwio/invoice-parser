@@ -74,6 +74,59 @@ class GeminiInvoiceProcessor:
             logger.error(f"Gemini processing failed: {e}")
             return None, {"success": False, "error": str(e)}
 
+    async def structure_invoice_data_from_text(self, ocr_text: str) -> Tuple[Optional[Invoice], Dict[str, Any]]:
+        """
+        Structures invoice data from OCR text using Gemini.
+
+        Args:
+            ocr_text: The text extracted from the invoice by an OCR engine.
+
+        Returns:
+            A tuple of (Invoice object or None, processing metadata)
+        """
+        logger.info("Structuring invoice data from OCR text with Gemini")
+
+        try:
+            if not self._client.configure():
+                return None, {"success": False, "error": "Gemini client configuration failed"}
+
+            prompt = self._get_structuring_prompt()
+
+            structured_text = await self._client.extract_from_text(ocr_text, prompt)
+            if not structured_text:
+                return None, {"success": False, "error": "Gemini could not structure the text"}
+
+            parsed_data = invoice_parser.parse_to_invoice_data(structured_text)
+            if not parsed_data:
+                return None, {"success": False, "error": "Failed to parse structured text"}
+
+            invoice = self._convert_to_invoice(parsed_data)
+
+            metadata = {
+                "success": True,
+                "mode_used": "surya_gemini",
+                "model": app_settings.ai_model.GEMINI_MODEL_NAME,
+                "confidence": parsed_data.get("confidence", 0.9) # Higher confidence as it's structured
+            }
+
+            return invoice, metadata
+
+        except Exception as e:
+            logger.error(f"Gemini structuring failed: {e}")
+            return None, {"success": False, "error": str(e)}
+
+    def _get_structuring_prompt(self) -> str:
+        """Get the prompt for structuring OCR text."""
+        return """STRUCTURE: The following text was extracted from an invoice.
+        Your task is to analyze it and structure it into a valid JSON format.
+        Identify and extract all relevant fields:
+        - Vendor and customer details (name, tax id, address)
+        - Invoice metadata (invoice number, date, due date)
+        - All line items with description, quantity, unit price, and total
+        - Financial totals (subtotal, tax amount, total amount)
+        - Currency
+        Focus on accuracy and completeness."""
+
     def _get_prompt_for_mode(self, mode: str) -> str:
         """Get extraction prompt based on processing mode."""
         if mode == "lightning":

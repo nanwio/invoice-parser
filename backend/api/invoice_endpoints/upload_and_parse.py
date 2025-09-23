@@ -275,3 +275,67 @@ async def upload_and_parse_invoice_lightning(
     except Exception as e:
         logger.error(f"Lightning processing failed: {e}")
         raise HTTPException(status_code=500, detail="Lightning processing failed")
+
+
+@router.post("/upload-invoice-surya")
+async def upload_and_parse_invoice_surya(
+    file: UploadFile,
+    user: dict[str, str] = Depends(get_current_user)
+) -> dict:
+    """
+    Surya OCR + Gemini LLM processing for optimal speed and accuracy.
+    """
+    logger.info(f"Surya processing: {file.filename}")
+
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+
+    if file.size > app_settings.invoice_processing.MAX_FILE_SIZE_MB * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Max size: {app_settings.invoice_processing.MAX_FILE_SIZE_MB}MB"
+        )
+
+    try:
+        start_time = time.perf_counter()
+        file_bytes = await file.read()
+        file_hash = document_utils.calculate_file_hash(file_bytes)
+        cached_invoice = await invoice_cache.get_cached_invoice(file_hash)
+
+        if cached_invoice:
+            invoice_data = cached_invoice
+            processing_results = {
+                "validation": {"is_valid": True, "quality_score": 100.0, "errors": [], "warnings": []},
+                "processing_method": "cache_hit"
+            }
+        else:
+            classification = await document_classifier.classify_bytes(file_bytes)
+            if not classification.is_invoice:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Document is not an invoice. Detected: {classification.document_type}"
+                )
+
+            processor = MultiModeInvoiceProcessor()
+            invoice_data, processing_results = await processor.process_invoice(file_bytes, "surya_gemini")
+            await invoice_cache.cache_invoice(file_hash, invoice_data)
+
+        processing_time = time.perf_counter() - start_time
+        document_info = document_utils.extract_document_info(file_bytes, file_hash)
+        response = InvoiceUploadResponse(invoice_data, processing_results, processing_time)
+
+        logger.info(f"Surya processing completed in {processing_time:.2f}s")
+        return {
+            "success": response.success,
+            "job_id": response.job_id,
+            "invoice_data": response.invoice_data.model_dump(),
+            "validation": response.validation,
+            "processing_method": response.processing_method,
+            "processing_time_seconds": response.processing_time_seconds,
+            "document_info": document_info.model_dump(),
+            "user": user["username"]
+        }
+
+    except Exception as e:
+        logger.error(f"Surya processing failed: {e}")
+        raise HTTPException(status_code=500, detail="Surya processing failed")

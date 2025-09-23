@@ -12,9 +12,12 @@ from loguru import logger
 from invoice_processing.models.invoice_data import Invoice
 from invoice_processing.ai_services.gemini_processor import GeminiInvoiceProcessor
 from invoice_processing.ai_services.donut_processor import DonutOCRProcessor
+from invoice_processing.ai_services.surya_processor import SuryaProcessor
 from invoice_processing.validation.invoice_checker import InvoiceValidator, QuickValidator
 from invoice_processing.classification.document_classifier import document_classifier
 from invoice_processing.utilities.document_utils import document_utils
+import tempfile
+import os
 
 
 class MultiModeInvoiceProcessor:
@@ -31,6 +34,7 @@ class MultiModeInvoiceProcessor:
         """Initialize all processors."""
         self.gemini_processor = GeminiInvoiceProcessor()
         self.donut_processor = DonutOCRProcessor()
+        self.surya_processor = SuryaProcessor()
         self.full_validator = InvoiceValidator()
         self.quick_validator = QuickValidator()
 
@@ -55,6 +59,8 @@ class MultiModeInvoiceProcessor:
                 result = await self._process_fast(pdf_bytes)
             elif mode == "enhanced":
                 result = await self._process_enhanced(pdf_bytes)
+            elif mode == "surya_gemini":
+                result = await self._process_surya_gemini(pdf_bytes)
             else:
                 raise ValueError(f"Unknown processing mode: {mode}")
 
@@ -69,6 +75,31 @@ class MultiModeInvoiceProcessor:
         except Exception as e:
             logger.error(f"Invoice processing failed in {mode} mode: {e}")
             raise
+
+    async def _process_surya_gemini(self, pdf_bytes: bytes) -> Tuple[Invoice, Dict[str, Any]]:
+        """Surya + Gemini mode: High-speed OCR with LLM structuring."""
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+            temp_pdf.write(pdf_bytes)
+            temp_pdf_path = temp_pdf.name
+
+        try:
+            # Step 1: Extract text with Surya
+            ocr_text, doc_hash = self.surya_processor.process_invoice(temp_pdf_path)
+
+            # Step 2: Structure text with Gemini
+            invoice, gemini_metadata = await self.gemini_processor.structure_invoice_data_from_text(ocr_text)
+
+            # Step 3: Full validation
+            validation_result = self.full_validator.validate_invoice(invoice)
+
+            return invoice, {
+                **gemini_metadata,
+                "validation": validation_result.to_dict(),
+                "document_hash": doc_hash,
+                "processing_method": "surya_gemini"
+            }
+        finally:
+            os.unlink(temp_pdf_path)
 
     async def _process_lightning(self, pdf_bytes: bytes) -> Tuple[Invoice, Dict[str, Any]]:
         """Lightning mode: Ultra-fast Gemini processing with minimal validation."""
