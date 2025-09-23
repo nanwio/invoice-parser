@@ -9,7 +9,8 @@ from surya.model.recognition.processor import load_processor as load_rec_process
 from surya.postprocessing.text import draw_text_on_image
 import torch
 
-from invoice_processing.utilities.document_utils import get_pypdf_document_hash
+from invoice_processing.utilities.document_utils import document_utils
+
 
 class SuryaProcessor:
     """
@@ -65,7 +66,10 @@ class SuryaProcessor:
         Returns:
             A tuple containing the formatted OCR text and the SHA256 hash of the document.
         """
-        doc_hash = get_pypdf_document_hash(pdf_path)
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+            doc_hash = document_utils.calculate_file_hash(pdf_bytes)
+
         images = self._convert_pdf_to_images(pdf_path)
         text_lines = self._run_ocr_on_images(images)
         
