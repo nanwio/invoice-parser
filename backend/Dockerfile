@@ -7,7 +7,10 @@ RUN groupadd --system --gid 1001 appuser && \
 
 # Install system dependencies required by the application
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends poppler-utils && \
+    apt-get install -y --no-install-recommends \
+    poppler-utils \
+    libgl1-mesa-glx \
+    libglib2.0-0 && \
     rm -rf /var/lib/apt/lists/*
 
 # Set up the working directory and permissions
