@@ -28,6 +28,9 @@ RUN uv venv && \
     uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
 
+# Ensure the app user owns the virtual environment
+RUN chown -R appuser:appuser /app/.venv
+
 # --- Pre-cache PaddleOCR models ---
 # This significantly reduces cold start time in production.
 COPY --chown=appuser:appuser backend/scripts/cache_models.py ./scripts/
