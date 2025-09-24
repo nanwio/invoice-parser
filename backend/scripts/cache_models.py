@@ -16,11 +16,10 @@ try:
     # Initialize the engine to trigger the download. The engine object is discarded.
     # We use the same parameters as in the main app to ensure the correct models are cached.
     _ = PaddleOCR(
-        use_angle_cls=False,
+        # Basic settings that are most likely to work in build environment
         lang='es',
-        use_gpu=False,        # IMPORTANT: Must be False, as no GPU is available in the build environment.
         show_log=True,
-        enable_mkldnn=True,   # Cache MKL-DNN optimized models if available
+        use_angle_cls=False,
     )
     logger.success("PaddleOCR models have been successfully downloaded and cached.")
 
