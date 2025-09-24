@@ -21,6 +21,10 @@ RUN groupadd --system --gid 1001 appuser && \
 
 # Set up the working directory
 WORKDIR /app
+RUN chown appuser:appuser /app
+
+# Switch to the non-root user before creating venv
+USER appuser
 
 # Copy dependency files and install them into a virtual environment
 COPY --chown=appuser:appuser backend/pyproject.toml backend/uv.lock ./
@@ -28,16 +32,10 @@ RUN uv venv && \
     uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Ensure the app user owns the virtual environment and can execute its binaries
-RUN chown -R appuser:appuser /app/.venv && \
-    chmod -R +x /app/.venv/bin
-
 # --- Pre-cache PaddleOCR models ---
 # This significantly reduces cold start time in production.
 COPY --chown=appuser:appuser backend/scripts/cache_models.py ./scripts/
-USER appuser
 RUN /app/.venv/bin/python scripts/cache_models.py
-USER root
 
 #----------------------------------------------------------------
 # 2. Final Stage: The lean, production-ready container
