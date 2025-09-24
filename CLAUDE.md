@@ -1,128 +1,72 @@
-# CLAUDE.md
+# Project "Invoice Parser" Guidance
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This document provides a comprehensive overview of the Invoice Parser project, its architecture, and development practices.
+
+## Core Philosophy
+
+The project adheres to a strict **Clean Code** philosophy:
+- **Single Responsibility Principle:** Classes are small (typically under 100-130 lines) and have one clear purpose.
+- **Modularity:** Logic is organized into cohesive packages (e.g., `paddle_ocr`, `gemini_engines`).
+- **Readability:** Code is written to be self-explanatory, with descriptive names and clear structure.
+- **High Performance:** The entire pipeline is built with speed and efficiency as a primary goal, using asynchronous operations and parallelism.
 
 ## Development Commands
 
+Execute all commands from the **project root directory** (`/invoice-parser`).
+
 ### Local Development
 ```bash
-# Install dependencies with uv package manager
+# Install/update dependencies
+cd backend
 uv sync
 
-# Run the application locally
-uv run python app/server.py
+# Run the application locally with auto-reload
+cd backend
+uv run python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 
-# Generate authentication tokens
-./scripts/tokens.py generate --username user@example.com --days 365
-
-# Verify existing tokens
-./scripts/tokens.py verify TOKEN_HERE
-```
-
-### Docker Development
-```bash
-# Start services with Docker Compose
-docker compose up -d
-
-# Build and rebuild containers
-docker compose build
-
-# View logs
-docker compose logs -f app
+# Generate an authentication token for testing
+uv run python backend/generate_token.py
 ```
 
 ### Environment Setup
-- Copy `.env.example` to `.env`
-- Required: `SECRET_KEY` (generate with `openssl rand -hex 32`)
-- Required: `GEMINI_API_KEY` for AI-powered parsing
-- Optional: `REDIS_URL` for caching (defaults to localhost)
+- Create a `.env` file inside the `backend/` directory.
+- Required variables:
+  - `GEMINI_API_KEY`: Your API key for Google Gemini.
+  - `REDIS_URL`: The full connection string for your Redis instance (e.g., `redis://:password@host:port/0`).
+  - `JWT_SECRET_KEY`: A long, random string for signing tokens.
 
 ## Architecture Overview
 
-### Core Structure
-- **FastAPI Application**: Main REST API with automatic OpenAPI docs at `/docs`
-- **Gradio Web UI**: User interface mounted at `/ui` for manual uploads
-- **AI Parser**: Uses Google Gemini 2.5 Flash Lite for PDF invoice extraction
-- **Caching Layer**: Redis-based caching with pluggable strategies (Redis/Cloudflare KV)
-- **JWT Authentication**: Token-based security with role-based access
+The system is an asynchronous, multi-stage pipeline designed for high-speed invoice processing.
 
-### Key Modules
+### High-Level Flow
+1.  **PDF Upload**: A request hits the single `POST /api/v1/invoice/parse` endpoint.
+2.  **Cache Check**: The system checks Redis for a result using the PDF's hash. If found, returns it instantly.
+3.  **Optimized OCR**: The PDF is processed by a highly optimized, parallelized `PaddleOCR` engine running on the CPU.
+4.  **AI Structuring**: The raw text from the OCR is sent to `Gemini 2.5 Flash` with a robust prompt to be structured into a clean JSON format.
+5.  **Validation**: The structured data is validated against a set of business rules (e.g., totals must match).
+6.  **Cache & Response**: The final result is cached in Redis and returned to the user.
 
-#### Services Layer (`app/services/`)
-- **Parser** (`parser/`): AI-powered invoice extraction using Instructor + Gemini
-- **Cache** (`cache/`): Abstracted caching with Redis and Cloudflare KV strategies
-- **Classifier** (`classifier/`): Document type classification
-- **Security** (`security/`): JWT token generation and validation
+### Performance Focus
+The system is now built around a **single, highly-optimized performance mode** designed for maximum speed on CPU. All parameters for OCR and image processing have been fine-tuned for a sub-2-second target, removing the complexity of multiple performance profiles.
 
-#### REST API (`app/rest/`)
-- **Router** (`router.py`): Main API route aggregation
-- **Parser endpoints** (`parser/`): Invoice upload and parsing endpoints
-- **Models** (`models.py`): Pydantic models for API requests/responses
+### Key Modules (`backend/invoice_processing/`)
 
-#### Settings (`app/settings.py`)
-Configuration management with Pydantic Settings:
-- Model settings (Gemini API, model name)
-- Cache configuration (Redis URL, enable/disable)
-- File processing limits and allowed types
+#### `ai_services/`
+- **`paddle_ocr/`**: A self-contained package for all OCR operations.
+  - `processor.py`: The main orchestrator.
+  - `config.py`: Manages the single, ultra-fast configuration.
+  - `image_handler.py`: Handles PDF-to-image conversion and pre-processing.
+  - `ocr_executor.py`: Runs the core OCR engine in a parallelized, asynchronous manner.
+- **`gemini_processor.py`**: Manages all communication with the Gemini API for structuring data.
+  - `gemini_engines/prompts.py`: Contains the robust, centralized prompt for data extraction.
 
-### Application Flow
-1. **PDF Upload**: Via REST API (`/api/v1/parse`) or Web UI (`/ui`)
-2. **Cache Check**: Document hash lookup to avoid reprocessing
-3. **AI Processing**: Gemini model extracts structured data using Instructor
-4. **Response**: Structured invoice data (vendor, amounts, taxes, etc.)
+#### `parsing/invoice_pipeline.py`
+The main orchestrator for the entire process. It coordinates calls to the cache, OCR engine, and Gemini processor.
 
-### Authentication
-- JWT tokens generated via `scripts/tokens.py`
-- Tokens contain username and role claims
-- API endpoints protected with FastAPI dependency injection
-
-### Deployment Options
-- **Local**: Direct Python execution with `uv run`
-- **Docker**: Multi-container setup with Redis
-- **Cloudflare Containers**: Production deployment with KV storage
-
-### File Processing
-- PDF-only support (`application/pdf`)
-- 10MB default size limit (configurable)
-- Base64 encoding for AI model processing
-- Automatic caching by document hash
-
-### Web Interface
-- Gradio-powered UI for manual uploads
-- Integrated with main FastAPI app
-- Real-time parsing results display
-
-## Professional OCR Enhancements
-
-### Advanced Image Preprocessing (`app/services/preprocessing/`)
-- **High-DPI conversion**: PDF to 300 DPI PNG for optimal OCR
-- **Noise reduction**: Median filtering and artifact removal
-- **Auto-enhancement**: Contrast, sharpness, and brightness optimization
-- **Auto-orientation**: EXIF-based rotation correction
-- **Border cropping**: Automatic content-focused cropping
-
-### Enhanced AI Prompts
-- **Chain-of-thought reasoning**: Systematic document analysis
-- **Field-specific validation**: Spanish tax IDs, European dates, currency detection
-- **Mathematical verification**: Cross-validation of calculations
-- **Quality instructions**: Professional-grade extraction guidelines
-
-### Validation & Quality Assessment (`app/services/validation/`)
-- **Mathematical consistency**: Subtotal + tax = total validation
-- **Spanish tax ID validation**: NIF, CIF, NIE format checking
-- **Date logic validation**: ISO format and chronological consistency
-- **Currency format validation**: ISO 4217 codes
-- **Quality scoring**: 0-100 completeness and accuracy metrics
-
-### Dual API Endpoints
-- **Standard `/parse`**: Backward-compatible, fast processing
-- **Enhanced `/parse/enhanced`**: Professional validation with quality metrics
-  - Returns validation results and quality scores
-  - Configurable preprocessing (can be disabled for speed)
-  - Comprehensive error and warning reporting
-
-### Professional Features
-- **Fallback processing**: Auto-retry without preprocessing if enhanced fails
-- **Confidence scoring**: Quality assessment for business validation
-- **Detailed logging**: Professional monitoring and debugging
-- **Error categorization**: Errors vs warnings for business rules
+#### Other Key Modules
+- **`caching/`**: Contains the Redis cache logic.
+- **`classification/`**: (Currently Unused) Contains logic for document classification, which can be re-integrated if needed.
+- **`models/`**: Defines the Pydantic data structures for invoices.
+- **`validation/`**: Contains the logic for validating the final extracted data.
+- **`configuration/`**: Manages application settings via `dotenv` and the `.env` file.
