@@ -35,7 +35,9 @@ ENV PATH="/app/.venv/bin:$PATH"
 # --- Pre-cache PaddleOCR models ---
 # This significantly reduces cold start time in production.
 COPY --chown=appuser:appuser backend/scripts/cache_models.py ./scripts/
-RUN /app/.venv/bin/python scripts/cache_models.py
+RUN /app/.venv/bin/python scripts/cache_models.py && \
+    echo "Checking if PaddleOCR cache was created:" && \
+    ls -la /home/appuser/ || echo "No cache directory found"
 
 #----------------------------------------------------------------
 # 2. Final Stage: The lean, production-ready container
@@ -65,13 +67,15 @@ RUN chown appuser:appuser /app
 # Switch to the non-root user
 USER appuser
 
-# Copy the venv, application code, and the warmed-up model cache
+# Copy the venv and application code
 COPY --from=builder --chown=appuser:appuser /app/.venv ./.venv
-COPY --from=builder --chown=appuser:appuser /home/appuser/.paddleocr /home/appuser/.paddleocr
 COPY --chown=appuser:appuser backend/*.py ./
 COPY --chown=appuser:appuser backend/api ./api
 COPY --chown=appuser:appuser backend/configuration ./configuration
 COPY --chown=appuser:appuser backend/invoice_processing ./invoice_processing
+
+# Create .paddleocr directory for the user (models will be downloaded on first run if not cached)
+RUN mkdir -p /home/appuser/.paddleocr
 
 # Activate the venv for subsequent commands
 ENV PATH="/app/.venv/bin:$PATH"
