@@ -14,11 +14,8 @@ logger.info("Starting model caching script...")
 
 try:
     # Initialize the engine to trigger the download. The engine object is discarded.
-    _ = PaddleOCR(
-        use_textline_orientation=False,  # Updated from deprecated use_angle_cls
-        lang='es',                       # Ensure the correct language models are cached.
-        show_log=True
-    )
+    # Use only the most basic parameter to avoid API compatibility issues
+    _ = PaddleOCR(lang='es')
     logger.success("PaddleOCR models have been successfully downloaded and cached.")
 
 except Exception as e:
