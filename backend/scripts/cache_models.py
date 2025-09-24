@@ -10,16 +10,15 @@ runtime startup (cold start).
 from paddleocr import PaddleOCR
 from loguru import logger
 
-logger.info("Starting PaddleOCR model caching script...")
+logger.info("Starting model caching script...")
 
 try:
     # Initialize the engine to trigger the download. The engine object is discarded.
-    # We use the same parameters as in the main app to ensure the correct models are cached.
     _ = PaddleOCR(
-        # Basic settings that are most likely to work in build environment
-        lang='es',
-        show_log=True,
         use_angle_cls=False,
+        lang='es',            # Ensure the correct language models are cached.
+        use_gpu=False,        # IMPORTANT: Must be False, as no GPU is available in the build environment.
+        show_log=True
     )
     logger.success("PaddleOCR models have been successfully downloaded and cached.")
 
