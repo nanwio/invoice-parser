@@ -29,7 +29,12 @@ USER appuser
 # Copy dependency files and install them into a virtual environment
 COPY --chown=appuser:appuser backend/pyproject.toml backend/uv.lock ./
 RUN uv venv && \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev && \
+    chmod +x /app/.venv/bin/* && \
+    echo "Contents of /app/.venv/bin:" && \
+    ls -la /app/.venv/bin/ && \
+    echo "Checking if gunicorn exists:" && \
+    test -f /app/.venv/bin/gunicorn && echo "gunicorn found" || echo "gunicorn NOT found"
 ENV PATH="/app/.venv/bin:$PATH"
 
 # --- Pre-cache PaddleOCR models ---
