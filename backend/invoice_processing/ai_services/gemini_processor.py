@@ -2,15 +2,12 @@
 Gemini AI processor
 """
 
-import instructor
 from typing import Tuple, Dict, Any, Optional
 from loguru import logger
 import google.generativeai as genai
 
 from invoice_processing.models.invoice_data import Invoice
 from configuration.app_settings import app_settings
-
-instructor.patch()
 
 class GeminiInvoiceProcessor:
     """
