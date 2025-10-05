@@ -19,8 +19,8 @@ class PaddleConfig:
             # CPU Acceleration - MKL-DNN for Intel CPUs
             'enable_mkldnn': True,
 
-            # Optimize CPU thread usage (12 threads for Cloud Run 4 vCPU - balanced)
-            'cpu_threads': 12,
+            # Optimize CPU thread usage (24 threads for Cloud Run 8 vCPU - maximize parallelism)
+            'cpu_threads': 24,
 
             # General settings
             'use_gpu': False,

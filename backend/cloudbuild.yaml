@@ -1,8 +1,9 @@
 steps:
-  # Build the container image
+  # Build the container image (--no-cache forces fresh build)
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '--no-cache'
       - '-f'
       - 'backend/Dockerfile'
       - '-t'
@@ -28,9 +29,9 @@ steps:
       - 'managed'
       - '--allow-unauthenticated'
       - '--memory'
-      - '8Gi'
+      - '16Gi'
       - '--cpu'
-      - '4'
+      - '8'
       - '--timeout'
       - '300s'
       - '--max-instances'
