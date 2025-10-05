@@ -86,6 +86,6 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Expose the port the app runs on
 EXPOSE 8000
 
-# Start server. Using gunicorn as it's a more robust production server.
-# Shell form is required to expand PORT environment variable set by Cloud Run
-CMD gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 120 --chdir /app app:app
+# Start server with absolute path to gunicorn in venv
+# Shell form required to expand PORT variable
+CMD /app/.venv/bin/gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 120 --chdir /app app:app
