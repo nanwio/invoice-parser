@@ -38,6 +38,7 @@ steps:
       - '--min-instances'
       - '0'
       - '--port'
+        
       - '8000'
       - '--update-env-vars'
       - 'ENVIRONMENT=production,GEMINI_MODEL_NAME=gemini-2.5-flash-lite,REDIS_URL=redis://default:tFufJcQJUsWWzZ9lGUMF22Kv2LeSUk7B@redis-11003.c328.europe-west3-1.gce.redns.redis-cloud.com:11003'

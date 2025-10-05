@@ -25,6 +25,7 @@ dependencies = [
     "openvino>=2024.0.0",
     "fastapi-jwt[authlib]>=0.3.0",
     "pyjwt>=2.10.1",
+    "pypdf>=3.0.1",
 ]
 
 [project.optional-dependencies]
