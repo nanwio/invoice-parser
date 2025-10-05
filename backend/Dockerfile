@@ -34,5 +34,6 @@ RUN uv venv && \
 # Expose the port the app runs on
 EXPOSE 8000
 
-# Start server with basic configuration for debugging
-CMD ["/bin/bash", "-c", "source .venv/bin/activate && uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000} --log-level debug"]
+# Start server using uv run to ensure proper virtual environment activation
+# Cloud Run sets PORT env variable dynamically, so we use a shell form to expand it
+CMD uv run uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info
