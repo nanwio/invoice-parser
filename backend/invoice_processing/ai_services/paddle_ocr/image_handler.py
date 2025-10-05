@@ -49,8 +49,19 @@ class ImageHandler:
     def optimize_image_for_ocr(self, image: Image.Image) -> np.ndarray:
         """
         Convert a PIL Image to a BGR NumPy array suitable for PaddleOCR.
+        Applies aggressive resizing for speed optimization.
         """
-        # Ensure image is in RGB, then convert to BGR for OpenCV/Paddle
+        # Ensure image is in RGB
         if image.mode != 'RGB':
             image = image.convert('RGB')
+
+        # Smart resize: balance speed and quality for invoices
+        # Only resize very large images (>2000px) to avoid quality loss
+        max_dimension = 2000
+        if max(image.size) > max_dimension:
+            ratio = max_dimension / max(image.size)
+            new_size = tuple(int(dim * ratio) for dim in image.size)
+            image = image.resize(new_size, Image.Resampling.LANCZOS)
+
+        # Convert to BGR for OpenCV/Paddle
         return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)

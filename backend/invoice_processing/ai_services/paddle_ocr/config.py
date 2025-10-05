@@ -9,36 +9,39 @@ class PaddleConfig:
     @staticmethod
     def get_config() -> Dict[str, Any]:
         """
-        Returns a single, highly optimized configuration for ultra-fast processing.
+        Returns a single, highly optimized configuration for ultra-fast CPU processing.
+        All parameters are validated against PaddleOCR 3.x official documentation.
         """
         logger.info("Loading PaddleOCR with ultra_fast configuration")
-        
-        # This configuration is fine-tuned for maximum CPU speed.
+
+        # Balanced configuration: speed + quality for invoice processing
         return {
-            # High-Performance Inference Engine (HPI)
-            'enable_hpi': True,
-            
-            # Use MKL-DNN for significant CPU speed-up
+            # CPU Acceleration - MKL-DNN for Intel CPUs
             'enable_mkldnn': True,
-            
-            # Maximize CPU thread usage for parallel processing
-            'cpu_threads': 8,
-            
+
+            # Optimize CPU thread usage (12 threads for Cloud Run 4 vCPU - balanced)
+            'cpu_threads': 12,
+
             # General settings
             'use_gpu': False,
             'lang': 'es',
             'show_log': False,
             'use_space_char': True,
-            
-            # Detection model parameters (tuned for speed)
-            'det_db_thresh': 0.1,
-            'det_db_box_thresh': 0.3,
-            'det_db_unclip_ratio': 1.2,
-            
-            # Recognition model parameters (tuned for speed)
-            'rec_batch_num': 10,
-            'max_text_length': 30,
-            
-            # Disable angle classification for a significant speed boost
+
+            # Disable PaddleOCR 3.x extra models for speed (these are rarely needed)
+            'use_doc_orientation_classify': False,
+            'use_textline_orientation': False,
+            'use_doc_unwarping': False,
+
+            # Detection parameters - balanced for invoices (tables, numbers, text)
+            'det_db_thresh': 0.15,          # Balanced (0.1=slow/accurate, 0.3=fast/lossy)
+            'det_db_box_thresh': 0.35,      # Balanced (0.3=more boxes, 0.5=fewer boxes)
+            'det_db_unclip_ratio': 1.3,     # Slightly more padding for better recognition
+
+            # Recognition parameters - optimized for invoice accuracy
+            'rec_batch_num': 8,             # Balanced batch size
+            'max_text_length': 30,          # Keep 30 for invoice numbers/IDs
+
+            # Disable angle classification (invoices are usually straight)
             'use_angle_cls': False,
         }
