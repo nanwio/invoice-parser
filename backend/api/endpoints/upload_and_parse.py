@@ -61,8 +61,13 @@ async def upload_and_parse_invoice(
                 "total_processing_time": 0.01,
                 "document_info": document_utils.extract_document_info(file_bytes, file_hash)
             }
-            response = InvoiceParseResponse(cached_invoice, processing_results, user["username"], job_id)
-            return response.__dict__
+            response = InvoiceParseResponse(
+                invoice=cached_invoice,
+                processing_results=processing_results,
+                user=user["username"],
+                job_id=job_id
+            )
+            return response.model_dump()
         
         logger.info(f"[Job {job_id}] PDF Cache MISS. Starting full processing pipeline.")
     else:
@@ -75,5 +80,10 @@ async def upload_and_parse_invoice(
     if file_hash:
         await invoice_cache.cache_invoice(file_hash, invoice_data)
     
-    response = InvoiceParseResponse(invoice_data, processing_results, user["username"], job_id)
-    return response.__dict__
+    response = InvoiceParseResponse(
+        invoice=invoice_data,
+        processing_results=processing_results,
+        user=user["username"],
+        job_id=job_id
+    )
+    return response.model_dump()

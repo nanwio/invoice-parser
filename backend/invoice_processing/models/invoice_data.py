@@ -183,11 +183,3 @@ class InvoiceParseResponse(BaseModel):
     processing_results: dict
     user: str
     job_id: str
-
-    def __init__(self, invoice_data: Invoice, processing_results: dict, username: str, job_id: str):
-        super().__init__(
-            invoice=invoice_data,
-            processing_results=processing_results,
-            user=username,
-            job_id=job_id
-        )
