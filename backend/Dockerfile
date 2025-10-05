@@ -1,91 +1,57 @@
-#----------------------------------------------------------------
-# 1. Builder Stage: To compile dependencies and cache models
-#----------------------------------------------------------------
-FROM ghcr.io/astral-sh/uv:debian-slim AS builder
-
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install system dependencies needed for build and model caching
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    build-essential \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create a non-root user for security
-RUN groupadd --system --gid 1001 appuser && \
-    useradd --system --create-home --uid 1001 --gid 1001 appuser
-
-# Set up the working directory
-WORKDIR /app
-RUN chown appuser:appuser /app
-
-# Switch to the non-root user before creating venv
-USER appuser
-
-# Copy dependency files and install them into a virtual environment
-COPY --chown=appuser:appuser backend/pyproject.toml backend/uv.lock ./
-RUN uv venv && \
-    uv sync --frozen && \
-    chmod +x /app/.venv/bin/* && \
-    echo "Verifying gunicorn installation:" && \
-    /app/.venv/bin/gunicorn --version
-ENV PATH="/app/.venv/bin:$PATH"
-
-# --- Pre-cache PaddleOCR models ---
-# This significantly reduces cold start time in production.
-COPY --chown=appuser:appuser backend/scripts/cache_models.py ./scripts/
-RUN /app/.venv/bin/python scripts/cache_models.py && \
-    echo "Checking if PaddleOCR cache was created:" && \
-    ls -la /home/appuser/ || echo "No cache directory found"
-
-#----------------------------------------------------------------
-# 2. Final Stage: The lean, production-ready container
-#----------------------------------------------------------------
+# Single-stage build for simplicity and reliability
 FROM ghcr.io/astral-sh/uv:debian-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Create a non-root user (must match the builder stage)
+# Create non-root user
 RUN groupadd --system --gid 1001 appuser && \
     useradd --system --create-home --uid 1001 --gid 1001 appuser
 
-# Install only the absolute bare-minimum RUNTIME dependencies
+# Install ALL system dependencies (build + runtime)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    build-essential \
     poppler-utils \
     libgl1-mesa-glx \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up the working directory and permissions
+# Set working directory
 WORKDIR /app
 RUN chown appuser:appuser /app
 
-# Switch to the non-root user
+# Switch to non-root user
 USER appuser
 
-# Copy the venv and application code
-COPY --from=builder --chown=appuser:appuser /app/.venv ./.venv
+# Copy dependencies and install
+COPY --chown=appuser:appuser backend/pyproject.toml backend/uv.lock ./
+RUN uv venv && \
+    uv sync --frozen && \
+    echo "=== Verifying gunicorn ===" && \
+    /app/.venv/bin/gunicorn --version && \
+    echo "=== gunicorn OK ===" && \
+    ls -la /app/.venv/bin/ | grep gunicorn
+
+# Copy application code
 COPY --chown=appuser:appuser backend/*.py ./
 COPY --chown=appuser:appuser backend/api ./api
 COPY --chown=appuser:appuser backend/configuration ./configuration
 COPY --chown=appuser:appuser backend/invoice_processing ./invoice_processing
 
-# Create .paddleocr directory for the user (models will be downloaded on first run if not cached)
+# Pre-cache PaddleOCR models (optional but recommended)
+COPY --chown=appuser:appuser backend/scripts/cache_models.py ./scripts/
+RUN /app/.venv/bin/python scripts/cache_models.py || echo "Model caching skipped"
+
+# Create paddleocr directory
 RUN mkdir -p /home/appuser/.paddleocr
 
-# Activate the venv for subsequent commands
+# Set PATH to use venv
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Expose the port the app runs on
+# Expose port
 EXPOSE 8000
 
-# Start server with absolute path to gunicorn in venv
-# Shell form required to expand PORT variable
+# Start with gunicorn - shell form to expand $PORT from Cloud Run
 CMD /app/.venv/bin/gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 120 --chdir /app app:app
