@@ -24,7 +24,6 @@ class PaddleConfig:
 
             # General settings
             'lang': 'es',
-            'show_log': False,
             'use_space_char': True,
 
             # Disable PaddleOCR 3.x extra models for speed (these are rarely needed)
