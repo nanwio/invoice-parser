@@ -30,7 +30,7 @@ class InvoiceProcessor:
         Initialize all required processors with a single, ultra-fast configuration.
         """
         self.gemini_processor = GeminiInvoiceProcessor()
-        self.paddle_processor = create_paddle_processor("ultra_fast")
+        self.paddle_processor = create_paddle_processor()
         self.validator = InvoiceValidator()
         
         asyncio.create_task(self._warm_up_connections())
