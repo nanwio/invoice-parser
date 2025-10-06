@@ -23,7 +23,6 @@ class PaddleConfig:
             'cpu_threads': 24,
 
             # General settings
-            'use_gpu': False,
             'lang': 'es',
             'show_log': False,
             'use_space_char': True,
