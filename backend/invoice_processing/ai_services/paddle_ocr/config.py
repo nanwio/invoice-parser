@@ -30,7 +30,6 @@ class PaddleConfig:
 
             # Disable PaddleOCR 3.x extra models for speed (these are rarely needed)
             'use_doc_orientation_classify': False,
-            'use_textline_orientation': False,
             'use_doc_unwarping': False,
 
             # Detection parameters - balanced for invoices (tables, numbers, text)
