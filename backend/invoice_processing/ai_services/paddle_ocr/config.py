@@ -14,31 +14,12 @@ class PaddleConfig:
         """
         logger.info("Loading PaddleOCR with ultra_fast configuration")
 
-        # Balanced configuration: speed + quality for invoice processing
+        # Minimal configuration with only verified PaddleOCR 3.x parameters
         return {
-            # CPU Acceleration - MKL-DNN for Intel CPUs
-            'enable_mkldnn': True,
-
-            # Optimize CPU thread usage (24 threads for Cloud Run 8 vCPU - maximize parallelism)
-            'cpu_threads': 24,
-
-            # General settings
+            # Language
             'lang': 'es',
-            'use_space_char': True,
 
-            # Disable PaddleOCR 3.x extra models for speed (these are rarely needed)
-            'use_doc_orientation_classify': False,
-            'use_doc_unwarping': False,
-
-            # Detection parameters - balanced for invoices (tables, numbers, text)
-            'det_db_thresh': 0.15,          # Balanced (0.1=slow/accurate, 0.3=fast/lossy)
-            'det_db_box_thresh': 0.35,      # Balanced (0.3=more boxes, 0.5=fewer boxes)
-            'det_db_unclip_ratio': 1.3,     # Slightly more padding for better recognition
-
-            # Recognition parameters - optimized for invoice accuracy
-            'rec_batch_num': 8,             # Balanced batch size
-            'max_text_length': 30,          # Keep 30 for invoice numbers/IDs
-
-            # Disable angle classification (invoices are usually straight)
+            # Disable extra features for speed
             'use_angle_cls': False,
+            'use_space_char': True,
         }

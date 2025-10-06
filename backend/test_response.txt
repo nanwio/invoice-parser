@@ -1,0 +1,2 @@
+Internal Server Error
+Tiempo: 22.055529s | HTTP: 500
