@@ -36,7 +36,7 @@ class OcrExecutor:
         def _ocr_sync(img):
             np_img = self.image_handler.optimize_image_for_ocr(img)
             with self.engine_lock:
-                result = self.ocr_engine.ocr(np_img, cls=False)
+                result = self.ocr_engine.ocr(np_img)
             
             if result and result[0]:
                 return [line[1][0] for line in result[0] if line[1][1] > 0.5]
