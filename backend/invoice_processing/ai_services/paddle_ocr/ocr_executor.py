@@ -37,9 +37,17 @@ class OcrExecutor:
             np_img = self.image_handler.optimize_image_for_ocr(img)
             with self.engine_lock:
                 result = self.ocr_engine.ocr(np_img)
-            
+
             if result and result[0]:
-                return [line[1][0] for line in result[0] if line[1][1] > 0.5]
+                text_lines = []
+                for line in result[0]:
+                    if isinstance(line, (list, tuple)) and len(line) >= 2:
+                        text_data = line[1]
+                        if isinstance(text_data, (list, tuple)) and len(text_data) >= 2:
+                            text, confidence = text_data[0], text_data[1]
+                            if confidence > 0.5:
+                                text_lines.append(text)
+                return text_lines
             return []
         
         text_lines = await loop.run_in_executor(self.executor, _ocr_sync, image)
