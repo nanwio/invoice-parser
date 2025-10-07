@@ -1,6 +1,8 @@
 # Single-stage build for simplicity and reliability
 FROM ghcr.io/astral-sh/uv:debian-slim
 
+# Force Python 3.12 for PaddlePaddle compatibility
+ENV UV_PYTHON=python3.12
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
