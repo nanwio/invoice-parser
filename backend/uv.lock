@@ -1437,6 +1437,7 @@ dependencies = [
     { name = "python-jose", extra = ["cryptography"] },
     { name = "python-multipart" },
     { name = "redis" },
+    { name = "setuptools" },
     { name = "uvicorn" },
 ]
 
@@ -1535,6 +1536,7 @@ requires-dist = [
     { name = "reportlab", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "rich", marker = "extra == 'dev'", specifier = ">=14.0.0" },
     { name = "scalar-fastapi", marker = "extra == 'dev'", specifier = ">=1.0.3" },
+    { name = "setuptools", specifier = ">=65.0.0" },
     { name = "torch", marker = "extra == 'dev'", specifier = ">=2.0.0" },
     { name = "torchvision", marker = "extra == 'dev'", specifier = ">=0.15.0" },
     { name = "transformers", marker = "extra == 'dev'", specifier = "==4.36.2" },
