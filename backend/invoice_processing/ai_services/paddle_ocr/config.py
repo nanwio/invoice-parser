@@ -16,10 +16,6 @@ class PaddleConfig:
 
         # Minimal configuration with only verified PaddleOCR 3.x parameters
         return {
-            # Language
             'lang': 'es',
-
-            # Disable extra features for speed
             'use_angle_cls': False,
-            'use_space_char': True,
         }
