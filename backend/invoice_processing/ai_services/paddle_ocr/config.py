@@ -14,8 +14,9 @@ class PaddleConfig:
         """
         logger.info("Loading PaddleOCR with ultra_fast configuration")
 
-        # Minimal configuration with only verified PaddleOCR 3.x parameters
+        # Minimal safe configuration for PaddleOCR 3.x
         return {
             'lang': 'es',
             'use_angle_cls': False,
+            'enable_mkldnn': False,  # Disable to avoid SIGFPE crashes in Cloud Run
         }
