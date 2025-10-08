@@ -1,8 +1,11 @@
 # Single-stage build for simplicity and reliability
-FROM ghcr.io/astral-sh/uv:debian-slim
+FROM python:3.12-slim-bookworm
 
-# Force Python 3.12 for PaddlePaddle compatibility
-ENV UV_PYTHON=python3.12
+# Install uv for dependency management
+RUN pip install uv
+
+# Force Python 3.12 for PaddlePaddle compatibility - No longer needed, image is 3.12
+# ENV UV_PYTHON=python3.12
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -16,7 +19,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     poppler-utils \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 

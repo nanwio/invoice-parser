@@ -3,7 +3,7 @@ name = "invoice-parsing"
 version = "1.0.1"
 description = "Automagically parse invoices and receipts with AI."
 # readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "~=3.12"
 dependencies = [
     "fastapi>=0.112.0",
     "uvicorn>=0.30.0",
