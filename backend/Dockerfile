@@ -30,6 +30,9 @@ RUN chown appuser:appuser /app
 # Switch to non-root user
 USER appuser
 
+# Add user's local bin to PATH
+ENV PATH="/home/appuser/.local/bin:$PATH"
+
 # Copy dependencies and install
 COPY --chown=appuser:appuser backend/pyproject.toml backend/poetry.lock* ./
 RUN poetry config virtualenvs.create false && \
