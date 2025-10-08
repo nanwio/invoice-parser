@@ -33,7 +33,7 @@ USER appuser
 # Copy dependencies and install
 COPY --chown=appuser:appuser backend/pyproject.toml backend/poetry.lock* ./
 RUN poetry config virtualenvs.create false && \
-    poetry install --no-root --no-dev && \
+    poetry install --no-root --without dev && \
     echo "=== Verifying gunicorn ===" && \
     gunicorn --version && \
     echo "=== gunicorn OK ==="
