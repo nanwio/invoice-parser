@@ -1,8 +1,8 @@
 # Single-stage build for simplicity and reliability
 FROM python:3.12-slim-bookworm
 
-# Install uv for dependency management
-RUN pip install uv
+# Install build tools
+RUN pip install poetry
 
 # Force Python 3.12 for PaddlePaddle compatibility - No longer needed, image is 3.12
 # ENV UV_PYTHON=python3.12
