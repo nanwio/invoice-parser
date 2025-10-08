@@ -12,7 +12,8 @@ def main():
     }
 
     # Generar token con la clave secreta de la configuración
-    token = jwt.encode(payload, app_settings.security.JWT_SECRET_KEY, algorithm='HS256')
+    secret_key = "c178c471524b37f64665a81f4ebf8e99d46504c890f71bc133c193da7cc11b71"
+    token = jwt.encode(payload, secret_key, algorithm='HS256')
 
     print("\n--- Tu token JWT para pruebas ---")
     print(token)
