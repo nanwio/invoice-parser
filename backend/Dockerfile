@@ -31,13 +31,12 @@ RUN chown appuser:appuser /app
 USER appuser
 
 # Copy dependencies and install
-COPY --chown=appuser:appuser backend/pyproject.toml backend/uv.lock ./
-RUN uv venv && \
-    uv sync --frozen && \
+COPY --chown=appuser:appuser backend/pyproject.toml backend/poetry.lock* ./
+RUN poetry config virtualenvs.create false && \
+    poetry install --no-root --no-dev && \
     echo "=== Verifying gunicorn ===" && \
-    /app/.venv/bin/gunicorn --version && \
-    echo "=== gunicorn OK ===" && \
-    ls -la /app/.venv/bin/ | grep gunicorn
+    gunicorn --version && \
+    echo "=== gunicorn OK ==="
 
 # Copy application code
 COPY --chown=appuser:appuser backend/*.py ./
