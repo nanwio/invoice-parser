@@ -49,16 +49,16 @@ COPY --chown=appuser:appuser backend/invoice_processing ./invoice_processing
 
 # Pre-cache PaddleOCR models (optional but recommended)
 COPY --chown=appuser:appuser backend/scripts/cache_models.py ./scripts/
-RUN /app/.venv/bin/python scripts/cache_models.py || echo "Model caching skipped"
+RUN python scripts/cache_models.py || echo "Model caching skipped"
 
 # Create paddleocr directory
 RUN mkdir -p /home/appuser/.paddleocr
 
-# Set PATH to use venv
-ENV PATH="/app/.venv/bin:$PATH"
+# The PATH is already set to include /home/appuser/.local/bin
+# ENV PATH="/app/.venv/bin:$PATH"
 
 # Expose port
 EXPOSE 8000
 
 # Start with gunicorn - shell form to expand $PORT from Cloud Run
-CMD /app/.venv/bin/gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 120 --chdir /app app:app
+CMD gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 120 --chdir /app app:app
