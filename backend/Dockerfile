@@ -3,22 +3,24 @@ ARG PYTHON_VERSION=3.12
 ARG DEBIAN_VERSION=bookworm
 
 # ---- Builder Stage ----
-# This stage prepares the dependencies using a robust pipx-based installation.
+# This stage prepares the dependencies using a robust, pip-bootstrapped toolchain.
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_VERSION} AS builder
 
 # Set environment variables for the build
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
+    # Add the local bin directory to the path for subsequent commands
     PATH="/root/.local/bin:$PATH"
 
-# Install pipx and build-essential, then use pipx to install poetry.
-# This is the official and most reliable method.
+# Install system build dependencies.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends pipx build-essential && \
-    pipx ensurepath && \
-    pipx install poetry && \
+    apt-get install -y --no-install-recommends build-essential && \
     rm -rf /var/lib/apt/lists/*
+
+# Use pip to install the latest poetry. This is the most reliable method.
+RUN pip install --upgrade pip && \
+    pip install poetry
 
 # Set the working directory
 WORKDIR /app
