@@ -3,24 +3,23 @@ ARG PYTHON_VERSION=3.12
 ARG DEBIAN_VERSION=bookworm
 
 # ---- Builder Stage ----
-# This stage prepares the dependencies using the standard pip installation method.
+# This stage prepares the dependencies using the official Poetry installer.
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_VERSION} AS builder
 
 # Set environment variables for the build
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    # Add the poetry bin directory to the PATH. This is where the official installer places it.
+    PATH="/root/.local/bin:$PATH"
 
-# Install system build dependencies.
+# Install system build dependencies and curl.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential && \
+    apt-get install -y --no-install-recommends build-essential curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Use the image's native pip to install poetry. Executables will be in /usr/local/bin.
-RUN pip install --upgrade pip poetry
-
-# DIAGNOSTIC STEP: Find the exact location of the poetry executable
-RUN find / -name "poetry" -type f
+# Use the official installer to install Poetry. This is the most reliable method.
+RUN curl -sSL https://install.python-poetry.org | python3 -
 
 # Set the working directory
 WORKDIR /app
@@ -28,7 +27,7 @@ WORKDIR /app
 # Copy dependency definition files
 COPY backend/pyproject.toml backend/poetry.lock* ./
 
-# Export dependencies. /usr/local/bin is in the PATH by default.
+# Export dependencies. The poetry command will now be found in the PATH.
 RUN poetry export -f requirements.txt --output requirements.txt --without-hashes --without dev
 
 # Install the dependencies using pip into a self-contained directory
