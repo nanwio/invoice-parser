@@ -4,6 +4,9 @@ FROM python:3.12-slim-bookworm
 # Install build tools
 RUN pip install poetry
 
+# Ensure essential build tools are present for packages like numpy
+RUN pip install --upgrade setuptools wheel
+
 # Force Python 3.12 for PaddlePaddle compatibility - No longer needed, image is 3.12
 # ENV UV_PYTHON=python3.12
 ENV PYTHONDONTWRITEBYTECODE=1
