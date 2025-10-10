@@ -38,8 +38,9 @@ steps:
       - "--min-instances"
       - "0"
       - "--port"
-
       - "8000"
+      - "--remove-env-vars"
+      - "REDIS_URL"
       - "--update-env-vars"
       - "ENVIRONMENT=production,GEMINI_MODEL_NAME=gemini-2.5-flash-lite"
       - "--update-secrets"
