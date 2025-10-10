@@ -11,11 +11,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Install build-time system dependencies and poetry
+# Install build-time system dependencies and Python build tools
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential && \
-    pip install --upgrade pip poetry && \
+    apt-get install -y --no-install-recommends build-essential curl && \
+    pip install --upgrade pip setuptools wheel && \
     rm -rf /var/lib/apt/lists/*
+
+# Install poetry using the official installer for reliability
+RUN curl -sSL https://install.python-poetry.org | python3 -
+
+# Add poetry to the PATH
+ENV PATH="/root/.local/bin:${PATH}"
 
 # Set the working directory
 WORKDIR /app
