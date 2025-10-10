@@ -1,85 +1,64 @@
-# Use a specific version of the builder image for reproducibility
-ARG PYTHON_VERSION=3.12
-ARG DEBIAN_VERSION=bookworm
+# Single-stage build for simplicity and reliability
+FROM python:3.12-slim-bookworm
 
-# ---- Builder Stage ----
-# This stage prepares the dependencies using the official Poetry installer.
-FROM python:${PYTHON_VERSION}-slim-${DEBIAN_VERSION} AS builder
+# Install build tools
+RUN pip install poetry
 
-# Set environment variables for the build
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive \
-    # Add the poetry bin directory to the PATH. This is where the official installer places it.
-    PATH="/root/.local/bin:$PATH"
+# Force Python 3.12 for PaddlePaddle compatibility - No longer needed, image is 3.12
+# ENV UV_PYTHON=python3.12
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system build dependencies.
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential && \
-    rm -rf /var/lib/apt/lists/*
+# Create non-root user
+RUN groupadd --system --gid 1001 appuser && \
+    useradd --system --create-home --uid 1001 --gid 1001 appuser
 
-# Use the image's native pip to install a specific, stable version of poetry.
-# Executables will be in /usr/local/bin, which is in the PATH by default.
-RUN pip install --upgrade pip poetry==1.8.2
-
-# Set the working directory
-WORKDIR /app
-
-# Copy only the dependency definition file
-COPY backend/pyproject.toml ./
-
-# Generate a compatible lock file and then export dependencies.
-# This makes the build independent of the local environment.
-RUN poetry lock --no-update
-RUN poetry export -f requirements.txt --output requirements.txt --without-hashes --without dev
-
-# Install the dependencies using pip into a self-contained directory
-RUN pip install --no-cache-dir --prefix="/opt/venv" -r requirements.txt
-
-
-# ---- Final Stage ----
-# This stage creates the final, lean production image.
-FROM python:${PYTHON_VERSION}-slim-${DEBIAN_VERSION} AS final
-
-# Set environment variables for runtime, including the path to our installed packages
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH="/opt/venv/lib/python${PYTHON_VERSION}/site-packages" \
-    PATH="/opt/venv/bin:$PATH"
-
-
+# Install ALL system dependencies (build + runtime)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    build-essential \
     poppler-utils \
     libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user for secure application execution
-RUN groupadd --system --gid 1001 appuser && \
-    useradd --system --create-home --uid 1001 --gid 1001 appuser
-
-# Copy the installed Python environment from the builder stage
-COPY --from=builder /opt/venv /opt/venv
-
-# Set the working directory
+# Set working directory
 WORKDIR /app
+RUN chown appuser:appuser /app
 
-# Copy the application code
-COPY backend/ ./
-
-# Pre-cache PaddleOCR models and create necessary directory
-RUN mkdir -p /home/appuser/.paddleocr && \
-    python scripts/cache_models.py || echo "Model caching skipped"
-
-# Grant ownership of the app and home directory to the non-root user
-RUN chown -R appuser:appuser /app /home/appuser
-
-# Switch to the non-root user
+# Switch to non-root user
 USER appuser
 
-# Expose the application port
+# Add user's local bin to PATH
+ENV PATH="/home/appuser/.local/bin:$PATH"
+
+# Copy dependencies and install
+COPY --chown=appuser:appuser backend/pyproject.toml backend/poetry.lock* ./
+RUN poetry config virtualenvs.create false && \
+    poetry install --no-root --without dev && \
+    echo "=== Verifying gunicorn ===" && \
+    gunicorn --version && \
+    echo "=== gunicorn OK ==="
+
+# Copy application code
+COPY --chown=appuser:appuser backend/*.py ./
+COPY --chown=appuser:appuser backend/api ./api
+COPY --chown=appuser:appuser backend/configuration ./configuration
+COPY --chown=appuser:appuser backend/invoice_processing ./invoice_processing
+
+# Pre-cache PaddleOCR models (optional but recommended)
+COPY --chown=appuser:appuser backend/scripts/cache_models.py ./scripts/
+RUN python scripts/cache_models.py || echo "Model caching skipped"
+
+# Create paddleocr directory
+RUN mkdir -p /home/appuser/.paddleocr
+
+# The PATH is already set to include /home/appuser/.local/bin
+# ENV PATH="/app/.venv/bin:$PATH"
+
+# Expose port
 EXPOSE 8000
 
-# Set the final command to run the application
-CMD ["gunicorn", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:${PORT:-8000}", "--timeout", "120", "--chdir", "/app", "app:app"]
+# Start with gunicorn - shell form to expand $PORT from Cloud Run
+CMD gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 120 --chdir /app app:app
