@@ -3,7 +3,7 @@ ARG PYTHON_VERSION=3.12
 ARG DEBIAN_VERSION=bookworm
 
 # ---- Builder Stage ----
-# This stage prepares the dependencies using a robust, explicit-path method.
+# This stage prepares the dependencies using the standard pip installation method.
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_VERSION} AS builder
 
 # Set environment variables for the build
@@ -16,7 +16,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-# Use the image's native pip to install poetry. This ensures it's for the correct Python version.
+# Use the image's native pip to install poetry. Executables will be in /usr/local/bin.
 RUN pip install --upgrade pip poetry
 
 # Set the working directory
@@ -25,9 +25,8 @@ WORKDIR /app
 # Copy dependency definition files
 COPY backend/pyproject.toml backend/poetry.lock* ./
 
-# Export dependencies using the absolute path to the poetry executable.
-# This bypasses any PATH ambiguity and is the most reliable method.
-RUN /root/.local/bin/poetry export -f requirements.txt --output requirements.txt --without-hashes --without dev
+# Export dependencies. /usr/local/bin is in the PATH by default.
+RUN poetry export -f requirements.txt --output requirements.txt --without-hashes --without dev
 
 # Install the dependencies using pip into a self-contained directory
 RUN pip install --no-cache-dir --prefix="/opt/venv" -r requirements.txt
