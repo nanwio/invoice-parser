@@ -25,10 +25,12 @@ RUN pip install --upgrade pip poetry==1.8.2
 # Set the working directory
 WORKDIR /app
 
-# Copy dependency definition files
-COPY backend/pyproject.toml backend/poetry.lock* ./
+# Copy only the dependency definition file
+COPY backend/pyproject.toml ./
 
-# Export dependencies. The poetry command will now be found in the PATH.
+# Generate a compatible lock file and then export dependencies.
+# This makes the build independent of the local environment.
+RUN poetry lock --no-update
 RUN poetry export -f requirements.txt --output requirements.txt --without-hashes --without dev
 
 # Install the dependencies using pip into a self-contained directory
