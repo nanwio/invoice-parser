@@ -19,6 +19,9 @@ RUN apt-get update && \
 # Use the image's native pip to install poetry. Executables will be in /usr/local/bin.
 RUN pip install --upgrade pip poetry
 
+# DIAGNOSTIC STEP: Find the exact location of the poetry executable
+RUN find / -name "poetry" -type f
+
 # Set the working directory
 WORKDIR /app
 
