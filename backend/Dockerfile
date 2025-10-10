@@ -25,7 +25,7 @@ COPY backend/pyproject.toml ./
 
 # Install numpy and other binary packages FIRST (ensures wheels are used)
 RUN pip install --no-cache-dir --only-binary=:all: \
-    numpy==1.25.2 \
+    numpy==1.26.4 \
     pillow==10.4.0 \
     pandas==2.1.4
 
