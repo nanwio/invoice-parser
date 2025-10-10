@@ -17,14 +17,25 @@ RUN apt-get update && \
 # Set working directory
 WORKDIR /app
 
-# Upgrade pip and install build tools
+# Upgrade pip and install build tools compatible with Python 3.12
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Copy ONLY pyproject.toml first for better caching
 COPY backend/pyproject.toml ./
 
-# Install dependencies directly with pip (no Poetry needed!)
-# pip can read pyproject.toml natively since 21.x
+# Install numpy and other binary packages FIRST (ensures wheels are used)
+RUN pip install --no-cache-dir --only-binary=:all: \
+    numpy==1.25.2 \
+    pillow==10.4.0 \
+    pandas==2.1.4
+
+# Install paddlepaddle and paddleocr
+RUN pip install --no-cache-dir \
+    paddlepaddle==2.6.0 \
+    paddleocr==2.7.3 \
+    opencv-python-headless==4.8.1.78
+
+# Install remaining dependencies
 RUN pip install --no-cache-dir \
     fastapi==0.115.6 \
     uvicorn==0.32.1 \
@@ -37,19 +48,12 @@ RUN pip install --no-cache-dir \
     "passlib[bcrypt]==1.7.4" \
     python-multipart==0.0.19 \
     google-generativeai==0.8.5 \
-    pillow==10.0.0 \
-    paddleocr==2.7.3 \
-    paddlepaddle==2.6.0 \
-    "numpy>=1.25.2,<1.26" \
-    "opencv-python-headless>=4.8.1,<4.9" \
     pdf2image==1.17.0 \
     instructor==1.3.0 \
-    "openvino>=2024.0.0,<2025" \
+    openvino==2024.5.0 \
     "fastapi-jwt[authlib]==0.3.0" \
     pyjwt==2.10.1 \
-    pypdf==3.0.1 \
-    setuptools==65.0.0 \
-    "pandas>=2.1.0,<2.2" && \
+    pypdf==3.0.1 && \
     echo "=== Verifying gunicorn ===" && \
     gunicorn --version && \
     echo "=== gunicorn OK ==="
