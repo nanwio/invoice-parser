@@ -53,7 +53,7 @@ RUN pip install --no-cache-dir \
     openvino==2024.5.0 \
     "fastapi-jwt[authlib]==0.3.0" \
     pyjwt==2.10.1 \
-    pypdf==3.0.1 && \
+    pypdf==3.17.4 && \
     echo "=== Verifying gunicorn ===" && \
     gunicorn --version && \
     echo "=== gunicorn OK ==="
