@@ -13,13 +13,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     # Add the poetry bin directory to the PATH. This is where the official installer places it.
     PATH="/root/.local/bin:$PATH"
 
-# Install system build dependencies and curl.
+# Install system build dependencies.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential curl && \
+    apt-get install -y --no-install-recommends build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-# Use the official installer to install Poetry. This is the most reliable method.
-RUN curl -sSL https://install.python-poetry.org | python3 -
+# Use the image's native pip to install a specific, stable version of poetry.
+# Executables will be in /usr/local/bin, which is in the PATH by default.
+RUN pip install --upgrade pip poetry==1.8.2
 
 # Set the working directory
 WORKDIR /app
