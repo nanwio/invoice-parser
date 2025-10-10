@@ -14,15 +14,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POETRY_VIRTUALENVS_CREATE=false \
     PATH="/home/appuser/.local/bin:$PATH"
 
-# Install build-time system dependencies
+# Install system dependencies and Poetry
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install poetry
-RUN curl -sSL https://install.python-poetry.org | python3 -
+    apt-get install -y --no-install-recommends build-essential && \
+    pip install poetry && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user
 RUN groupadd --system --gid 1001 appuser && \
