@@ -25,7 +25,12 @@ WORKDIR /app
 
 # Copy dependencies and install AS ROOT
 COPY backend/pyproject.toml backend/poetry.lock* ./
+
+# Pre-install setuptools in the Python environment for Poetry's build backend
+RUN python -m pip install --no-cache-dir setuptools>=65.0.0 wheel
+
 RUN poetry config virtualenvs.create false && \
+    poetry config installer.max-workers 10 && \
     poetry install --no-root --without dev && \
     echo "=== Verifying gunicorn ===" && \
     gunicorn --version && \
