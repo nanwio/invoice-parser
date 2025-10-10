@@ -7,15 +7,9 @@ RUN pip install poetry
 # Ensure essential build tools are present for packages like numpy
 RUN pip install --upgrade setuptools wheel
 
-# Force Python 3.12 for PaddlePaddle compatibility - No longer needed, image is 3.12
-# ENV UV_PYTHON=python3.12
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
-
-# Create non-root user
-RUN groupadd --system --gid 1001 appuser && \
-    useradd --system --create-home --uid 1001 --gid 1001 appuser
 
 # Install ALL system dependencies (build + runtime)
 RUN apt-get update && \
@@ -28,16 +22,9 @@ RUN apt-get update && \
 
 # Set working directory
 WORKDIR /app
-RUN chown appuser:appuser /app
 
-# Switch to non-root user
-USER appuser
-
-# Add user's local bin to PATH
-ENV PATH="/home/appuser/.local/bin:$PATH"
-
-# Copy dependencies and install
-COPY --chown=appuser:appuser backend/pyproject.toml backend/poetry.lock* ./
+# Copy dependencies and install AS ROOT
+COPY backend/pyproject.toml backend/poetry.lock* ./
 RUN poetry config virtualenvs.create false && \
     poetry install --no-root --without dev && \
     echo "=== Verifying gunicorn ===" && \
@@ -45,17 +32,23 @@ RUN poetry config virtualenvs.create false && \
     echo "=== gunicorn OK ==="
 
 # Copy application code
-COPY --chown=appuser:appuser backend/*.py ./
-COPY --chown=appuser:appuser backend/api ./api
-COPY --chown=appuser:appuser backend/configuration ./configuration
-COPY --chown=appuser:appuser backend/invoice_processing ./invoice_processing
+COPY backend/*.py ./
+COPY backend/api ./api
+COPY backend/configuration ./configuration
+COPY backend/invoice_processing ./invoice_processing
 
 # Pre-cache PaddleOCR models (optional but recommended)
-COPY --chown=appuser:appuser backend/scripts/cache_models.py ./scripts/
+COPY backend/scripts/cache_models.py ./scripts/
 RUN python scripts/cache_models.py || echo "Model caching skipped"
 
-# Create paddleocr directory
-RUN mkdir -p /home/appuser/.paddleocr
+# NOW create non-root user and change ownership
+RUN groupadd --system --gid 1001 appuser && \
+    useradd --system --create-home --uid 1001 --gid 1001 appuser && \
+    mkdir -p /home/appuser/.paddleocr && \
+    chown -R appuser:appuser /app /home/appuser/.paddleocr
+
+# Switch to non-root user for runtime
+USER appuser
 
 # The PATH is already set to include /home/appuser/.local/bin
 # ENV PATH="/app/.venv/bin:$PATH"
