@@ -3,25 +3,22 @@ ARG PYTHON_VERSION=3.12
 ARG DEBIAN_VERSION=bookworm
 
 # ---- Builder Stage ----
-# This stage prepares the dependencies using a robust pip-based installation.
+# This stage prepares the dependencies using a robust pipx-based installation.
 FROM python:${PYTHON_VERSION}-slim-${DEBIAN_VERSION} AS builder
 
 # Set environment variables for the build
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    PATH="/root/.local/bin:$PATH"
 
-# Install build-time system dependencies and Python build tools
+# Install pipx and build-essential, then use pipx to install poetry.
+# This is the official and most reliable method.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential curl && \
-    pip install --upgrade pip setuptools wheel && \
+    apt-get install -y --no-install-recommends pipx build-essential && \
+    pipx ensurepath && \
+    pipx install poetry && \
     rm -rf /var/lib/apt/lists/*
-
-# Install poetry using the official installer for reliability
-RUN curl -sSL https://install.python-poetry.org | python3 -
-
-# Add poetry to the PATH
-ENV PATH="/root/.local/bin:${PATH}"
 
 # Set the working directory
 WORKDIR /app
@@ -30,7 +27,6 @@ WORKDIR /app
 COPY backend/pyproject.toml backend/poetry.lock* ./
 
 # Export the dependencies to a requirements.txt file.
-# This is a more reliable method for Docker builds than `poetry install`.
 RUN poetry export -f requirements.txt --output requirements.txt --without-hashes --without dev
 
 # Install the dependencies using pip into a self-contained directory
