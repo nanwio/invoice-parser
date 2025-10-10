@@ -14,10 +14,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POETRY_VIRTUALENVS_CREATE=false \
     PATH="/home/appuser/.local/bin:$PATH"
 
-# Install system dependencies and Poetry
+# Install system dependencies and Python build tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential && \
-    pip install poetry && \
+    pip install --upgrade pip setuptools wheel poetry && \
     rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user
