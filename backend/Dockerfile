@@ -1,12 +1,6 @@
 # Single-stage build for simplicity and reliability
 FROM python:3.12-slim-bookworm
 
-# Install build tools
-RUN pip install poetry
-
-# Ensure essential build tools are present for packages like numpy
-RUN pip install --upgrade setuptools wheel
-
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -23,15 +17,39 @@ RUN apt-get update && \
 # Set working directory
 WORKDIR /app
 
-# Copy dependencies and install AS ROOT
-COPY backend/pyproject.toml backend/poetry.lock* ./
+# Upgrade pip and install build tools
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Pre-install setuptools in the Python environment for Poetry's build backend
-RUN python -m pip install --no-cache-dir setuptools>=65.0.0 wheel
+# Copy ONLY pyproject.toml first for better caching
+COPY backend/pyproject.toml ./
 
-RUN poetry config virtualenvs.create false && \
-    poetry config installer.max-workers 10 && \
-    poetry install --no-root --without dev && \
+# Install dependencies directly with pip (no Poetry needed!)
+# pip can read pyproject.toml natively since 21.x
+RUN pip install --no-cache-dir \
+    fastapi==0.115.6 \
+    uvicorn==0.32.1 \
+    gunicorn==21.0.0 \
+    pydantic==2.10.2 \
+    pydantic-settings==2.10.0 \
+    redis==5.0.0 \
+    loguru==0.7.2 \
+    "python-jose[cryptography]==3.3.0" \
+    "passlib[bcrypt]==1.7.4" \
+    python-multipart==0.0.19 \
+    google-generativeai==0.8.5 \
+    pillow==10.0.0 \
+    paddleocr==2.7.3 \
+    paddlepaddle==2.6.0 \
+    "numpy>=1.25.2,<1.26" \
+    "opencv-python-headless>=4.8.1,<4.9" \
+    pdf2image==1.17.0 \
+    instructor==1.3.0 \
+    "openvino>=2024.0.0,<2025" \
+    "fastapi-jwt[authlib]==0.3.0" \
+    pyjwt==2.10.1 \
+    pypdf==3.0.1 \
+    setuptools==65.0.0 \
+    "pandas>=2.1.0,<2.2" && \
     echo "=== Verifying gunicorn ===" && \
     gunicorn --version && \
     echo "=== gunicorn OK ==="
