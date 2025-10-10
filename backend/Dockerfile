@@ -45,7 +45,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/opt/venv/lib/python${PYTHON_VERSION}/site-packages" \
     PATH="/opt/venv/bin:$PATH"
 
-# Install only runtime system dependencies
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     poppler-utils \
