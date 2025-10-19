@@ -58,7 +58,7 @@ class InvoiceValidator:
         result = InvoiceValidationResult()
 
         if not invoice:
-            result.add_error("FATAL", "Invoice object is None, indicating a catastrophic failure in parsing.")
+            result.add_error("FATAL: Invoice object is None, indicating a catastrophic failure in parsing.")
             result.is_valid = False
             result.quality_score = 0
             return result
@@ -77,7 +77,7 @@ class InvoiceValidator:
     def _check_required_fields(self, invoice: Invoice, result: InvoiceValidationResult):
         """Check that required fields are present."""
         if not invoice.vendor or not invoice.vendor.name:
-            result.add_error("vendor_name", "Vendor name is missing.")
+            result.add_error("Vendor name is missing.")
 
         if not invoice.customer.name:
             result.add_error("Customer name is required")
@@ -127,7 +127,7 @@ class QuickValidator(InvoiceValidator):
         result = InvoiceValidationResult()
 
         if not invoice:
-            result.add_error("FATAL", "Invoice object is None, indicating a catastrophic failure in parsing.")
+            result.add_error("FATAL: Invoice object is None, indicating a catastrophic failure in parsing.")
             result.is_valid = False
             result.quality_score = 0
             return result

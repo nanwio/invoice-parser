@@ -18,14 +18,14 @@ Execute all commands from the **project root directory** (`/invoice-parser`).
 ```bash
 # Install/update dependencies
 cd backend
-uv sync
+poetry install
 
 # Run the application locally with auto-reload
 cd backend
-uv run python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+poetry run python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 
 # Generate an authentication token for testing
-uv run python backend/generate_token.py
+poetry run python generate_token.py
 ```
 
 ### Environment Setup
