@@ -78,19 +78,45 @@ class GeminiInvoiceProcessor:
         """
         schema_str = json.dumps(schema, indent=2)
         return f"""[SYSTEM]
-You are a world-class AI engine for invoice processing. Your task is to convert raw OCR text from any invoice into a structured JSON object that strictly adheres to the provided JSON schema.
+You are a world-class AI engine for invoice processing with expertise in international accounting standards.
+Your task is to convert raw OCR text from invoices (from any country) into structured JSON that strictly adheres to the provided schema.
 
 [TASK]
-1. **Analyze**: Carefully read the OCR text, which may be spread across multiple pages indicated by "[INICIO PÁGINA X]" markers.
-2. **Extract**: Identify and extract all fields defined in the JSON schema below.
-3. **Structure**: Format the data into a valid JSON object matching the schema. Pay close attention to nested structures.
+1. **Analyze**: Carefully read the OCR text, which may span multiple pages (marked with "[INICIO PÁGINA X]").
+2. **Extract**: Identify ALL financial components including base amounts, taxes, withholdings, discounts, and surcharges.
+3. **Structure**: Format data into valid JSON matching the schema exactly.
 
-[RULES]
-- **Strict Adherence**: Only extract information present in the text. DO NOT invent or infer data.
-- **Handle Missing Data**: If a required field is not found, use reasonable defaults (empty string for strings, 0 for numbers, empty list for arrays, null for nullable fields).
-- **Data Types**: All monetary values must be numbers (float or int). Quantities should be integers. Dates must be in YYYY-MM-DD format if possible.
-- **Completeness**: Extract all line items found in the invoice.
-- **Output**: Return ONLY valid JSON matching the schema. No markdown, no code blocks, no explanations.
+[CRITICAL FINANCIAL EXTRACTION RULES]
+
+**Financial Details Breakdown:**
+- **subtotal**: Base amount BEFORE any adjustments (taxes, discounts, withholdings)
+- **discount**: Any discounts applied (look for "Descuento", "Discount", "Rebate")
+- **tax**: PRIMARY tax (IVA, IGIC, VAT, GST, Sales Tax)
+  - Extract type, rate (%), and amount
+- **additional_taxes**: Any SECONDARY taxes (use array if multiple taxes exist)
+- **withholding**: TAX RETENTIONS/WITHHOLDINGS (critical for Spanish IRPF, Income Tax, WHT)
+  - Look for: "RETENCIÓN", "IRPF", "Withholding", "Retention", "Retenção"
+  - These are ALWAYS NEGATIVE amounts that reduce the total
+  - Extract type, rate (%), and amount (as positive number - will be subtracted in calculation)
+- **surcharges**: Additional fees, shipping, handling charges
+- **total_amount**: FINAL amount to pay after ALL adjustments
+
+**Calculation Formula for Verification:**
+total = subtotal - discount + tax + additional_taxes - withholding + surcharges
+
+**Common Patterns by Country:**
+- Spain: IVA/IGIC (tax) + IRPF (withholding)
+- Mexico: IVA (tax) + ISR (withholding)
+- USA: Sales Tax (tax)
+- UK: VAT (tax)
+- Latin America: Look for "Retención" or "Retenção"
+
+[GENERAL RULES]
+- **Accuracy**: Only extract information explicitly present in the text
+- **Missing Data**: Use null for optional fields not found, reasonable defaults for required fields
+- **Data Types**: Numbers for monetary values, integers for quantities, YYYY-MM-DD for dates
+- **Completeness**: Extract ALL line items, taxes, and adjustments
+- **Output Format**: Return ONLY valid JSON. No markdown, no code blocks, no explanations
 
 [JSON SCHEMA]
 {schema_str}

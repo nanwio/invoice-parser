@@ -89,17 +89,42 @@ class InvoiceValidator:
             result.add_error("At least one line item is required")
 
     def _check_math(self, invoice: Invoice, result: InvoiceValidationResult):
-        """Check mathematical consistency."""
+        """Check mathematical consistency with support for discounts, taxes, withholdings, and surcharges."""
         try:
-            # Check if subtotal + tax = total (with small tolerance)
-            expected_total = invoice.financial_details.subtotal + invoice.financial_details.tax.amount
-            actual_total = invoice.financial_details.total_amount
+            fd = invoice.financial_details
 
+            # Calculate expected total: subtotal - discount + taxes - withholding + surcharges
+            expected_total = fd.subtotal
+
+            # Subtract discount if present
+            if fd.discount:
+                expected_total -= fd.discount.amount
+
+            # Add primary tax
+            expected_total += fd.tax.amount
+
+            # Add additional taxes if present
+            if fd.additional_taxes:
+                for tax in fd.additional_taxes:
+                    expected_total += tax.amount
+
+            # Subtract withholding if present (e.g., IRPF)
+            if fd.withholding:
+                expected_total -= abs(fd.withholding.amount)  # Ensure we subtract positive value
+
+            # Add surcharges if present
+            if fd.surcharges:
+                for surcharge in fd.surcharges:
+                    expected_total += surcharge.amount
+
+            actual_total = fd.total_amount
+
+            # Allow small tolerance for rounding differences (0.02)
             if abs(expected_total - actual_total) > 0.02:
-                result.add_error(f"Math error: {expected_total} ≠ {actual_total}")
+                result.add_error(f"Math error: expected {expected_total:.2f} ≠ actual {actual_total:.2f}")
 
-        except Exception:
-            result.add_warning("Could not verify mathematical consistency")
+        except Exception as e:
+            result.add_warning(f"Could not verify mathematical consistency: {str(e)}")
 
     def _check_data_quality(self, invoice: Invoice, result: InvoiceValidationResult):
         """Check data quality and completeness."""

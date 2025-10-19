@@ -74,9 +74,68 @@ class Tax(BaseModel):
     """
     Tax calculation details.
     """
-    type: TaxRateType
-    rate: float
-    amount: float
+    type: TaxRateType = Field(
+        ...,
+        description="Type of tax applied (IVA, IGIC, VAT, GST, etc.)"
+    )
+    rate: float = Field(
+        ...,
+        description="Tax rate as percentage (e.g., 21.0 for 21%)"
+    )
+    amount: float = Field(
+        ...,
+        description="Total tax amount in the invoice currency"
+    )
+
+
+class Withholding(BaseModel):
+    """
+    Tax withholding/retention details (e.g., IRPF, Income Tax Withholding).
+    """
+    type: str = Field(
+        ...,
+        description="Type of withholding (e.g., 'IRPF', 'Income Tax', 'WHT')"
+    )
+    rate: float = Field(
+        ...,
+        description="Withholding rate as percentage"
+    )
+    amount: float = Field(
+        ...,
+        description="Withholding amount (typically negative or to be subtracted)"
+    )
+
+
+class Discount(BaseModel):
+    """
+    Discount applied to the invoice.
+    """
+    description: Optional[str] = Field(
+        None,
+        description="Description of the discount"
+    )
+    rate: Optional[float] = Field(
+        None,
+        description="Discount rate as percentage if applicable"
+    )
+    amount: float = Field(
+        ...,
+        description="Discount amount"
+    )
+
+
+class Surcharge(BaseModel):
+    """
+    Additional charges or surcharges.
+    """
+    description: str = Field(
+        ...,
+        description="Description of the surcharge"
+    )
+    amount: float = Field(
+        ...,
+        description="Surcharge amount"
+    )
 
 
 class Payment(BaseModel):
@@ -90,6 +149,7 @@ class Payment(BaseModel):
 class FinancialDetails(BaseModel):
     """
     Complete financial information for the invoice.
+    Supports international invoice formats with taxes, withholdings, discounts, and surcharges.
     """
     currency: Optional[str] = Field(
         None,
@@ -98,15 +158,31 @@ class FinancialDetails(BaseModel):
     )
     subtotal: float = Field(
         ...,
-        description="Sum of all net amounts for each line item"
+        description="Sum of all line items before any taxes, discounts, or adjustments"
+    )
+    discount: Optional[Discount] = Field(
+        None,
+        description="Discount applied to the subtotal, if any"
     )
     tax: Tax = Field(
         ...,
-        description="Tax type, rate and amount applied to the invoice"
+        description="Primary tax applied (IVA, IGIC, VAT, GST, etc.)"
+    )
+    additional_taxes: Optional[list[Tax]] = Field(
+        default_factory=list,
+        description="Additional taxes if multiple tax types apply"
+    )
+    withholding: Optional[Withholding] = Field(
+        None,
+        description="Tax withholding/retention (e.g., IRPF, Income Tax) - amount to subtract from total"
+    )
+    surcharges: Optional[list[Surcharge]] = Field(
+        default_factory=list,
+        description="Additional surcharges or fees"
     )
     total_amount: float = Field(
         ...,
-        description="Sum of all amounts for each line item with tax applied"
+        description="Final amount to pay after all adjustments: subtotal - discount + taxes - withholding + surcharges"
     )
     payment: Optional[Payment] = Field(
         None,
