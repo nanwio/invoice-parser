@@ -72,6 +72,16 @@ class GeminiInvoiceProcessor:
             logger.error(f"Failed to parse Gemini JSON response: {e}")
             logger.error(f"Raw response: {response.text if 'response' in locals() else 'N/A'}")
             return None, {"success": False, "error": f"JSON parse error: {str(e)}"}
+        except ValueError as e:
+            # Pydantic validation errors are ValueError subclass
+            logger.error(f"Pydantic validation failed: {e}")
+            logger.error(f"Raw JSON that failed validation: {json_text if 'json_text' in locals() else 'N/A'}")
+            return None, {
+                "success": False,
+                "error": "Validation error",
+                "error_detail": str(e),
+                "error_type": "pydantic_validation"
+            }
         except Exception as e:
             logger.error(f"Gemini structuring failed: {e}")
             return None, {"success": False, "error": str(e)}

@@ -51,10 +51,14 @@ These fields are ALWAYS extracted when present:
 - `currency`: ISO 4217 code (EUR, USD, GBP) or symbol (€, $, £)
 - `subtotal`: Amount before taxes/adjustments
 - `tax`: Primary tax details
-  - `type`: IGIC, IVA, VAT, GST, etc.
+  - `type`: **MUST be one of**: `IGIC`, `IVA`, `EXEMPT`, or `OTHER`
+    - Use `IGIC` for Canary Islands General Indirect Tax
+    - Use `IVA` for Spanish/EU VAT
+    - Use `EXEMPT` if explicitly tax-exempt
+    - Use `OTHER` for ANY other tax type (VAT, GST, Sales Tax, Electricity Tax, Environmental Tax, etc.)
   - `rate`: Percentage (e.g., 7.0 for 7%)
   - `amount`: Tax amount in currency
-- `additional_taxes`: Array of additional taxes (if multiple tax types apply)
+- `additional_taxes`: Array of additional taxes (if multiple tax types apply, same type rules apply)
 - `withholding`: Tax retention/withholding (e.g., I.R.P.F., Income Tax)
   - `type`: Name of withholding
   - `rate`: Percentage

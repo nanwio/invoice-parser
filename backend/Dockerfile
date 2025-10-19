@@ -27,6 +27,7 @@ COPY backend/pyproject.toml ./
 RUN pip install --no-cache-dir --only-binary=:all: \
     numpy==1.26.4 \
     pillow==10.4.0 \
+    pillow-heif==1.1.1 \
     pandas==2.1.4
 
 # Install paddlepaddle and paddleocr

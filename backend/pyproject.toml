@@ -24,6 +24,7 @@ passlib = { version = "^1.7.4", extras = ["bcrypt"] }
 python-multipart = "^0.0.19"
 google-generativeai = "^0.8.5"
 pillow = "^10.0.0"
+pillow-heif = "^0.18.0"
 paddleocr = "2.7.3"
 paddlepaddle = "2.6.0"
 numpy = "~=1.26.4"

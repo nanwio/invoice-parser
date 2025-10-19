@@ -24,6 +24,11 @@ SUPPORTED_MIMETYPES = [
     "image/jpeg",
     "image/png",
     "image/jpg",
+    "image/webp",
+    "image/bmp",
+    "image/tiff",
+    "image/heic",
+    "image/heif",
 ]
 
 @router.post(
@@ -76,10 +81,25 @@ async def upload_and_parse_invoice(
 
     processor = InvoiceProcessor()
     invoice_data, processing_results = await processor.process_invoice(file_bytes, file.content_type)
-    
+
+    # Check if invoice processing failed (validation error, parsing error, etc.)
+    if invoice_data is None:
+        logger.error(
+            f"[Job {job_id}] Invoice processing failed - could not extract or validate invoice data. "
+            f"Processing results: {processing_results}"
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Failed to process invoice. The document may contain invalid data or unexpected formats.",
+                "job_id": job_id,
+                "processing_results": processing_results
+            }
+        )
+
     if file_hash:
         await invoice_cache.cache_invoice(file_hash, invoice_data)
-    
+
     response = InvoiceParseResponse(
         invoice=invoice_data,
         processing_results=processing_results,
