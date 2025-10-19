@@ -30,7 +30,7 @@ steps:
       - "--memory"
       - "16Gi"
       - "--cpu"
-      - "8"
+      - "4"
       - "--timeout"
       - "300s"
       - "--max-instances"
