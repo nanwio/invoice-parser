@@ -76,13 +76,13 @@ class InvoiceValidator:
 
     def _check_required_fields(self, invoice: Invoice, result: InvoiceValidationResult):
         """Check that required fields are present."""
-        if not invoice.vendor or not invoice.vendor.name:
+        if not invoice.parties.vendor or not invoice.parties.vendor.name:
             result.add_error("Vendor name is missing.")
 
-        if not invoice.customer.name:
+        if not invoice.parties.customer.name:
             result.add_error("Customer name is required")
 
-        if invoice.financials.total_amount <= 0:
+        if invoice.financial_details.total_amount <= 0:
             result.add_error("Total amount must be greater than zero")
 
         if not invoice.items:
@@ -92,8 +92,8 @@ class InvoiceValidator:
         """Check mathematical consistency."""
         try:
             # Check if subtotal + tax = total (with small tolerance)
-            expected_total = invoice.financials.subtotal + invoice.financials.tax.amount
-            actual_total = invoice.financials.total_amount
+            expected_total = invoice.financial_details.subtotal + invoice.financial_details.tax.amount
+            actual_total = invoice.financial_details.total_amount
 
             if abs(expected_total - actual_total) > 0.02:
                 result.add_error(f"Math error: {expected_total} ≠ {actual_total}")
@@ -108,11 +108,11 @@ class InvoiceValidator:
             result.add_warning("Invoice date is missing")
 
         # Check if tax ID is present
-        if not invoice.vendor.tax_id:
+        if not invoice.parties.vendor.tax_id:
             result.add_warning("Vendor tax ID is missing")
 
         # Check currency
-        if not invoice.financials.currency:
+        if not invoice.financial_details.currency:
             result.add_warning("Currency is not specified")
 
 
@@ -133,11 +133,11 @@ class QuickValidator(InvoiceValidator):
             return result
 
         # Only check critical fields
-        if not invoice.vendor.name:
+        if not invoice.parties.vendor.name:
             result.add_error("Missing vendor")
-        if not invoice.customer.name:
+        if not invoice.parties.customer.name:
             result.add_error("Missing customer")
-        if invoice.financials.total_amount <= 0:
+        if invoice.financial_details.total_amount <= 0:
             result.add_error("Invalid total")
 
         return result
