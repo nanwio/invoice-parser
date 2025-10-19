@@ -79,58 +79,58 @@ Identify the invoice type and extract relevant contextual data into the `extensi
 
 **Rental/Leasing Invoices:**
 ```json
-"extensions": {
-  "rental_property": {
+"extensions": {{
+  "rental_property": {{
     "type": "Property type (e.g., 'Local comercial B', 'Apartamento 3A')",
     "location": "Full property address or reference"
-  }
-}
+  }}
+}}
 ```
 
 **Transport/Shipping Invoices:**
 ```json
-"extensions": {
-  "shipment": {
+"extensions": {{
+  "shipment": {{
     "tracking_number": "Tracking ID",
     "carrier": "Shipping company",
     "origin": "Departure location",
     "destination": "Arrival location",
     "weight": "Package weight"
-  }
-}
+  }}
+}}
 ```
 
 **Medical/Healthcare Invoices:**
 ```json
-"extensions": {
-  "medical": {
+"extensions": {{
+  "medical": {{
     "patient_id": "Patient identifier",
     "insurance_provider": "Insurance company name",
     "claim_number": "Insurance claim reference",
     "service_date": "Date of service"
-  }
-}
+  }}
+}}
 ```
 
 **Construction/Project Invoices:**
 ```json
-"extensions": {
-  "project": {
+"extensions": {{
+  "project": {{
     "code": "Project reference code",
     "phase": "Project phase or milestone",
     "location": "Construction site location"
-  }
-}
+  }}
+}}
 ```
 
 **Contract-Based Invoices:**
 ```json
-"extensions": {
-  "contract": {
+"extensions": {{
+  "contract": {{
     "number": "Contract reference",
     "period": "Billing period (e.g., 'enero 2025', 'Q1 2025')"
-  }
-}
+  }}
+}}
 ```
 
 **General Rule**: If you identify contextual information that doesn't fit core fields but is clearly important (property details, shipment info, project codes, etc.), add it to `extensions` with a descriptive key.

@@ -258,23 +258,12 @@ class Invoice(BaseModel):
         default=None,
         description=(
             "Domain-specific structured extensions following EN16931/UBL pattern. "
-            "Examples: rental_property (location, type), shipment (tracking, carrier), "
-            "medical (patient_id, insurance), project (code, phase), contract (number, period)."
+            "Common extension keys: rental_property, shipment, medical, project, contract."
         )
     )
 
     model_config = ConfigDict(
-        extra="allow",  # Preserves completely unknown fields for maximum flexibility
-        json_schema_extra={
-            "examples": [{
-                "extensions": {
-                    "rental_property": {
-                        "type": "Local comercial B",
-                        "location": "Avda. Enrique Mederos, 29-B, 38760 Los Llanos de Aridane"
-                    }
-                }
-            }]
-        }
+        extra="allow"  # Preserves unknown fields per EN16931/UBL extensibility pattern
     )
 
 
