@@ -1,7 +1,7 @@
 import enum
 
-from typing import Optional
-from pydantic import BaseModel, Field
+from typing import Optional, Any
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class TaxRateType(enum.StrEnum):
@@ -228,6 +228,11 @@ class InvoiceParties(BaseModel):
 class Invoice(BaseModel):
     """
     Complete invoice structure.
+
+    Follows EN16931/UBL extensibility pattern:
+    - Core fields: Always validated and required for all invoices
+    - extensions: Domain-specific structured data (rental, medical, transport, etc.)
+    - Extra fields: Preserved via model_config for complete flexibility
     """
     metadata: Optional[Metadata] = Field(
         None,
@@ -248,6 +253,28 @@ class Invoice(BaseModel):
     items: list[LineItem] = Field(
         ...,
         description="Every detected invoice item."
+    )
+    extensions: Optional[dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Domain-specific structured extensions following EN16931/UBL pattern. "
+            "Examples: rental_property (location, type), shipment (tracking, carrier), "
+            "medical (patient_id, insurance), project (code, phase), contract (number, period)."
+        )
+    )
+
+    model_config = ConfigDict(
+        extra="allow",  # Preserves completely unknown fields for maximum flexibility
+        json_schema_extra={
+            "examples": [{
+                "extensions": {
+                    "rental_property": {
+                        "type": "Local comercial B",
+                        "location": "Avda. Enrique Mederos, 29-B, 38760 Los Llanos de Aridane"
+                    }
+                }
+            }]
+        }
     )
 
 
