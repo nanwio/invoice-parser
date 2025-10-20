@@ -173,7 +173,15 @@ These fields are ALWAYS extracted when present:
 - `discount`: Discount applied (if present)
 - `surcharges`: Additional fees or surcharges
 - `total_amount`: **FINAL amount to be paid** (most critical field) - Extract from summary
-- `payment`: Payment method information (extract bank account/IBAN EXACTLY as shown, including asterisks if present)
+- `payment`: Payment method information (optional, use null if not found)
+  - `method`: **Infer from keywords:**
+    - "Domiciliada", "Domiciliación", "Domiciliación bancaria" → BANK_TRANSFER
+    - "Transferencia", "Transfer", "Wire transfer" → BANK_TRANSFER
+    - "Tarjeta", "Card", "Credit card" → CARD
+    - "Efectivo", "Cash" → CASH
+    - "Depósito", "Deposit" → BANK_DEPOSIT
+    - If unclear or not mentioned → OTHER
+  - `number`: Extract bank account/IBAN EXACTLY as shown, including asterisks if present
 
 **Line Items:**
 - `items`: Array of all invoice items

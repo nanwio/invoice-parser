@@ -142,7 +142,7 @@ class Payment(BaseModel):
     """
     Payment method information.
     """
-    method: BankPaymentMethod
+    method: Optional[BankPaymentMethod] = None
     number: Optional[str] = None
 
 
@@ -185,8 +185,8 @@ class FinancialDetails(BaseModel):
         description="Final amount to pay after all adjustments: subtotal - discount + taxes - withholding + surcharges"
     )
     payment: Optional[Payment] = Field(
-        None,
-        description="Information about the payment method used in this transaction"
+        default=None,
+        description="Information about the payment method used in this transaction. If payment info not found, use null."
     )
 
 
