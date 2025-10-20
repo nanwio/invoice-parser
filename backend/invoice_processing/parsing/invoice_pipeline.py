@@ -1,14 +1,17 @@
 """
-Optimized Invoice processor
+Optimized Invoice processor with Gemini Vision support
 One responsibility: coordinate the invoice processing pipeline
 """
 
 import time
 import asyncio
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, List
 from loguru import logger
 import tempfile
 import os
+import io
+from PIL import Image
+from pdf2image import convert_from_bytes, convert_from_path
 
 from invoice_processing.models.invoice_data import Invoice
 from invoice_processing.ai_services.gemini_processor import GeminiInvoiceProcessor
@@ -19,23 +22,40 @@ from invoice_processing.utilities.document_utils import document_utils
 
 class InvoiceProcessor:
     """
-    Invoice processing pipeline with parallel execution:
-    1. OCR (Optimized PaddleOCR)
-    2. Structuring (Gemini)
+    Invoice processing pipeline with Gemini Vision (multimodal):
+    1. Convert PDF to images OR use image directly
+    2. Structuring (Gemini Vision - sees document layout)
     3. Validation
+
+    Vision mode provides superior accuracy for complex multi-page invoices
+    because Gemini can SEE the visual structure, not just read text.
     """
 
-    def __init__(self):
+    def __init__(self, use_vision: bool = True, use_ocr_fallback: bool = False):
         """
-        Initialize all required processors with a single, ultra-fast configuration.
+        Initialize processor with vision mode enabled by default.
+
+        Args:
+            use_vision: If True, use Gemini Vision (multimodal). If False, use text-only OCR mode.
+            use_ocr_fallback: If True, keep PaddleOCR as fallback if vision fails.
         """
-        self.gemini_processor = GeminiInvoiceProcessor()
-        self.paddle_processor = create_paddle_processor()
+        self.use_vision = use_vision
+        self.use_ocr_fallback = use_ocr_fallback
+
+        self.gemini_processor = GeminiInvoiceProcessor(vision_mode=use_vision)
         self.validator = InvoiceValidator()
-        
+
+        # Initialize PaddleOCR only if needed as fallback
+        if use_ocr_fallback:
+            self.paddle_processor = create_paddle_processor()
+            logger.info("PaddleOCR initialized as fallback")
+        else:
+            self.paddle_processor = None
+
         asyncio.create_task(self._warm_up_connections())
-        
-        logger.info("InvoiceProcessor initialized in single-mode (ultra_fast)")
+
+        mode = "VISION" if use_vision else "OCR+TEXT"
+        logger.info(f"InvoiceProcessor initialized in {mode} mode")
 
     async def _warm_up_connections(self):
         """Pre-warm connections and models for faster processing."""
@@ -72,54 +92,58 @@ class InvoiceProcessor:
 
     async def process_invoice(self, document_bytes: bytes, content_type: str) -> tuple[Invoice, dict]:
         """
-        Processes an invoice from bytes, handling either PDF or image content.
+        Processes an invoice from bytes using Gemini Vision (multimodal).
+
+        For PDFs: Converts pages to images and sends to Gemini Vision
+        For Images: Sends directly to Gemini Vision
+
+        Vision mode allows Gemini to SEE the document structure, providing
+        superior accuracy for complex multi-page invoices with tables and sections.
         """
         start_time = time.perf_counter()
         logger.info(f"Starting invoice processing for content type: {content_type}")
 
-        ocr_results_by_page = []
-        preprocessing_time = 0.0
-        temp_pdf_path = None
+        conversion_time = 0.0
+        images = []
 
         try:
-            # Step 1: OCR (handles PDF or Image)
-            logger.info("Step 1/3: Running optimized OCR")
-            ocr_start = time.perf_counter()
+            # Step 1: Convert document to images
+            logger.info("Step 1/3: Converting document to images for Vision mode")
+            conversion_start = time.perf_counter()
 
             if content_type == "application/pdf":
-                # For PDFs, we still use the temp file approach for pdf2image compatibility
-                preprocessing_start = time.perf_counter()
-                _, temp_pdf_path = await self._parallel_preprocessing(document_bytes)
-                preprocessing_time = time.perf_counter() - preprocessing_start
-                
-                ocr_results_by_page = await self.paddle_processor.process_pdf_async(temp_pdf_path)
+                # Convert PDF to images using pdf2image
+                logger.info("Converting PDF pages to images...")
+                images = await asyncio.to_thread(
+                    convert_from_bytes,
+                    document_bytes,
+                    dpi=150,  # Reduced from 300 for speed, still high quality
+                    fmt='jpeg',
+                    jpegopt={'quality': 85, 'optimize': True}
+                )
+                logger.info(f"Converted {len(images)} PDF pages to images")
             else:
-                # For images, process bytes directly
-                ocr_results_by_page = await self.paddle_processor.process_image_async(document_bytes)
-            
-            ocr_time = time.perf_counter() - ocr_start
-            
-            # Format the page-by-page results into a single string for the LLM
-            ocr_text_for_llm = self._format_ocr_results_for_llm(ocr_results_by_page)
-            
-            logger.info(f"OCR completed in {ocr_time:.2f}s, extracted {len(ocr_text_for_llm)} chars from "
-                        f"{len(ocr_results_by_page)} pages.")
+                # For image files, load directly
+                image = Image.open(io.BytesIO(document_bytes))
+                images = [image]
+                logger.info("Loaded image directly")
 
-            # Step 2: Structure text with Gemini (parallel with PDF cleanup if it exists)
-            logger.info("Step 2/3: Structuring data with Gemini")
+            conversion_time = time.perf_counter() - conversion_start
+            logger.info(f"Image conversion completed in {conversion_time:.2f}s")
+
+            # Step 2: Structure with Gemini Vision (multimodal)
+            logger.info("Step 2/3: Structuring data with Gemini Vision (multimodal)")
             structuring_start = time.perf_counter()
-            
-            gemini_task = asyncio.create_task(
-                self.gemini_processor.structure_invoice_data_from_text(ocr_text_for_llm)
-            )
-            
-            if temp_pdf_path:
-                cleanup_task = asyncio.create_task(self._cleanup_temp_file(temp_pdf_path))
-                invoice, gemini_metadata = await gemini_task
-                await cleanup_task
+
+            if self.use_vision:
+                invoice, gemini_metadata = await self.gemini_processor.structure_invoice_data_from_images(images)
             else:
-                invoice, gemini_metadata = await gemini_task
-            
+                # Fallback to OCR mode if vision disabled
+                if not self.paddle_processor:
+                    raise ValueError("OCR mode requested but PaddleOCR not initialized")
+                # TODO: Implement OCR fallback path
+                raise NotImplementedError("OCR fallback not yet implemented in this version")
+
             structuring_time = time.perf_counter() - structuring_start
 
             # Step 3: Fast validation
@@ -129,31 +153,29 @@ class InvoiceProcessor:
             validation_time = time.perf_counter() - validation_start
 
         except Exception as e:
-            # Ensure cleanup even on error
-            await self._cleanup_temp_file(temp_pdf_path)
+            logger.error(f"Invoice processing failed: {e}")
             raise e
 
         total_time = time.perf_counter() - start_time
-        
+
         logger.info(
             f"Invoice processed in {total_time:.2f}s "
-            f"(prep: {preprocessing_time:.2f}s, "
-            f"ocr: {ocr_time:.2f}s, structure: {structuring_time:.2f}s, validation: {validation_time:.2f}s)"
+            f"(conversion: {conversion_time:.2f}s, "
+            f"structure: {structuring_time:.2f}s, validation: {validation_time:.2f}s)"
         )
-        
+
         processing_results = {
             **gemini_metadata,
             "validation": validation_result.to_dict(),
-            "document_hash": "N/A for non-PDF files", # Hash is calculated on PDF bytes
-            "processing_method": "optimized_paddle_gemini_ultra_fast",
+            "document_hash": "N/A for non-PDF files",
+            "processing_method": "gemini_vision_multimodal",
             "total_processing_time": total_time,
             "performance_breakdown": {
-                "preprocessing_time": preprocessing_time,
-                "ocr_time": ocr_time,
+                "image_conversion_time": conversion_time,
                 "structuring_time": structuring_time,
                 "validation_time": validation_time
             },
-            "optimization_config": "ultra_fast"
+            "optimization_config": "vision_mode"
         }
 
         return invoice, processing_results
