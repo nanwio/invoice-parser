@@ -23,21 +23,27 @@ class GeminiInvoiceProcessor:
 
     def __init__(self, vision_mode: bool = True):
         """
-        Initialize the Gemini processor.
+        Initialize the Gemini processor with Controlled Generation.
 
         Args:
             vision_mode: If True, use multimodal vision. If False, use text-only mode.
         """
         genai.configure(api_key=app_settings.ai_model.GEMINI_API_KEY)
         self.vision_mode = vision_mode
+
+        # Generate schema for Controlled Generation
+        # This FORCES Gemini to comply with the exact Pydantic structure
+        response_schema = Invoice.model_json_schema()
+
         self._client = genai.GenerativeModel(
             model_name=app_settings.ai_model.GEMINI_MODEL_NAME,
             generation_config={
                 "response_mime_type": "application/json",
+                "response_schema": response_schema,  # Controlled Generation
                 "temperature": 0.1,
             }
         )
-        logger.info(f"Gemini processor initialized in {'VISION' if vision_mode else 'TEXT'} mode")
+        logger.info(f"Gemini processor initialized in {'VISION' if vision_mode else 'TEXT'} mode with Controlled Generation")
 
     async def _warm_up_connection(self):
         """A simple check to ensure the API key is valid during startup."""
