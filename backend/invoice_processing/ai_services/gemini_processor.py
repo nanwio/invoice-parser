@@ -58,18 +58,16 @@ class GeminiInvoiceProcessor:
         """
         Structures invoice data from OCR text, returning a Pydantic Invoice object.
         Uses centralized prompt from prompts.py with EN16931/UBL extensibility support.
+        Uses Controlled Generation (response_schema) for strict schema compliance.
         """
-        logger.info("Structuring invoice data from OCR text with Gemini JSON mode.")
+        logger.info("Structuring invoice data from OCR text with Gemini Controlled Generation.")
 
         try:
-            # Generate dynamic schema from Pydantic model
-            schema = Invoice.model_json_schema()
-            schema_str = json.dumps(schema, indent=2)
+            # Use the centralized, comprehensive prompt WITHOUT schema duplication
+            # Schema is enforced via response_schema in generation_config
+            full_prompt = get_structuring_prompt() + ocr_text
 
-            # Use the centralized, comprehensive prompt with dynamic schema
-            full_prompt = get_structuring_prompt(schema_str) + ocr_text
-
-            # Call Gemini with JSON mode
+            # Call Gemini with Controlled Generation
             response = await self._client.generate_content_async(full_prompt)
 
             # Parse the JSON response
@@ -113,6 +111,7 @@ class GeminiInvoiceProcessor:
         - Better at identifying summary sections vs breakdowns
         - Understands spatial layout and document hierarchy
         - More accurate for multi-page consolidated invoices
+        - Uses Controlled Generation (response_schema) for strict schema compliance
 
         Args:
             images: List of PIL Images (PDF pages converted to images)
@@ -120,23 +119,20 @@ class GeminiInvoiceProcessor:
         Returns:
             Tuple of (Invoice object or None, metadata dict)
         """
-        logger.info(f"Structuring invoice data from {len(images)} images with Gemini VISION mode.")
+        logger.info(f"Structuring invoice data from {len(images)} images with Gemini Vision + Controlled Generation.")
 
         try:
-            # Generate dynamic schema from Pydantic model
-            schema = Invoice.model_json_schema()
-            schema_str = json.dumps(schema, indent=2)
-
-            # Use the centralized, comprehensive prompt with dynamic schema
-            prompt = get_structuring_prompt(schema_str)
+            # Use the centralized, comprehensive prompt WITHOUT schema duplication
+            # Schema is enforced via response_schema in generation_config
+            prompt = get_structuring_prompt()
 
             # Prepare content for multimodal request: [prompt, image1, image2, ...]
             content = [prompt]
             content.extend(images)
 
-            logger.info(f"Sending {len(images)} images to Gemini Flash-Lite Vision...")
+            logger.info(f"Sending {len(images)} images to Gemini Flash-Lite Vision with Controlled Generation...")
 
-            # Call Gemini with multimodal content (text + images)
+            # Call Gemini with multimodal content (text + images) + Controlled Generation
             response = await self._client.generate_content_async(content)
 
             # Parse the JSON response

@@ -4,17 +4,17 @@ Centralized Prompts for Gemini Engines.
 This module follows EN16931/UBL extensibility patterns for invoice data extraction.
 """
 
-def get_structuring_prompt(json_schema: str) -> str:
+def get_structuring_prompt() -> str:
     """
-    Generates the comprehensive structuring prompt with dynamic JSON schema.
+    Generates the comprehensive structuring prompt for Gemini Controlled Generation.
 
-    Args:
-        json_schema: The JSON schema string from Invoice.model_json_schema()
+    When using Controlled Generation with response_schema, the schema is passed
+    separately in generation_config and should NOT be included in the prompt text.
 
     Returns:
-        Complete prompt ready to be sent to Gemini
+        Complete prompt ready to be sent to Gemini (without schema duplication)
     """
-    return f"""[SYSTEM]
+    return """[SYSTEM]
 You are a world-class AI engine for invoice processing. Your primary function is to convert raw OCR text from any invoice layout into a structured, accurate JSON object. You process invoices from any industry, country, and format while maintaining strict adherence to the provided text.
 
 [TASK]
@@ -496,11 +496,10 @@ Subtotal regularización:         5,02 €
 
 6. **Page 2 and 3 values IGNORED**: Only summary values from page 1 used
 
-[OUTPUT SCHEMA]
+[FINAL INSTRUCTIONS]
 Return ONLY valid JSON without markdown code blocks or additional text.
-The JSON must strictly conform to the following Pydantic model schema:
-
-{json_schema}
+The JSON structure is enforced by Gemini Controlled Generation (response_schema).
+Focus on accurate data extraction following all rules above.
 
 [OCR TEXT TO PROCESS]
 """
