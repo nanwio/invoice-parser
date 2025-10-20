@@ -126,6 +126,11 @@ class GeminiInvoiceProcessor:
             # Use the comprehensive prompt with schema, semantic ontology, and few-shot example
             prompt = get_structuring_prompt(schema_str)
 
+            # DEBUG: Log prompt size
+            prompt_size = len(prompt)
+            prompt_lines = prompt.count('\n')
+            logger.info(f"🔍 DEBUG - Prompt size: {prompt_size} chars, {prompt_lines} lines")
+
             # Prepare content for multimodal request: [prompt, image1, image2, ...]
             content = [prompt]
             content.extend(images)
@@ -135,8 +140,35 @@ class GeminiInvoiceProcessor:
             # Call Gemini with multimodal content (text + images)
             response = await self._client.generate_content_async(content)
 
+            # DEBUG: Log raw response details
+            logger.info(f"🔍 DEBUG - Response received")
+            logger.info(f"🔍 DEBUG - Response.text length: {len(response.text) if response.text else 0}")
+            logger.info(f"🔍 DEBUG - Response.text first 200 chars: {response.text[:200] if response.text else 'EMPTY'}")
+
+            # Check if response has prompt_feedback (safety/blocking issues)
+            if hasattr(response, 'prompt_feedback'):
+                logger.info(f"🔍 DEBUG - Prompt feedback: {response.prompt_feedback}")
+
+            # Check candidates
+            if hasattr(response, 'candidates') and response.candidates:
+                logger.info(f"🔍 DEBUG - Number of candidates: {len(response.candidates)}")
+                for i, candidate in enumerate(response.candidates):
+                    logger.info(f"🔍 DEBUG - Candidate {i} finish_reason: {candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'N/A'}")
+                    if hasattr(candidate, 'safety_ratings'):
+                        logger.info(f"🔍 DEBUG - Candidate {i} safety_ratings: {candidate.safety_ratings}")
+
             # Parse the JSON response
             json_text = response.text.strip()
+
+            if not json_text:
+                logger.error("❌ CRITICAL: Gemini returned empty response")
+                return None, {
+                    "success": False,
+                    "error": "Gemini returned empty response",
+                    "prompt_size": prompt_size,
+                    "mode": "vision"
+                }
+
             invoice_dict = json.loads(json_text)
 
             # Validate and create Pydantic object
@@ -153,9 +185,16 @@ class GeminiInvoiceProcessor:
             return invoice, metadata
 
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse Gemini JSON response: {e}")
-            logger.error(f"Raw response: {response.text if 'response' in locals() else 'N/A'}")
-            return None, {"success": False, "error": f"JSON parse error: {str(e)}", "mode": "vision"}
+            logger.error(f"❌ Failed to parse Gemini JSON response: {e}")
+            logger.error(f"❌ Raw response text: {response.text if 'response' in locals() else 'N/A'}")
+            logger.error(f"❌ Response text length: {len(response.text) if 'response' in locals() and response.text else 0}")
+            return None, {
+                "success": False,
+                "error": f"JSON parse error: {str(e)}",
+                "mode": "vision",
+                "prompt_size": prompt_size if 'prompt_size' in locals() else 0,
+                "response_length": len(response.text) if 'response' in locals() and response.text else 0
+            }
         except ValueError as e:
             # Pydantic validation errors are ValueError subclass
             logger.error(f"Pydantic validation failed: {e}")
@@ -168,5 +207,14 @@ class GeminiInvoiceProcessor:
                 "mode": "vision"
             }
         except Exception as e:
-            logger.error(f"Gemini vision structuring failed: {e}")
-            return None, {"success": False, "error": str(e), "mode": "vision"}
+            logger.error(f"❌ Gemini vision structuring failed: {e}")
+            logger.error(f"❌ Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+            return None, {
+                "success": False,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "mode": "vision",
+                "prompt_size": prompt_size if 'prompt_size' in locals() else 0
+            }
