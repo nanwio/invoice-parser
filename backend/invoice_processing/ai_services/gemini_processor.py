@@ -23,7 +23,7 @@ class GeminiInvoiceProcessor:
 
     def __init__(self, vision_mode: bool = True):
         """
-        Initialize the Gemini processor with Controlled Generation.
+        Initialize the Gemini processor in JSON mode with semantic guidance.
 
         Args:
             vision_mode: If True, use multimodal vision. If False, use text-only mode.
@@ -31,19 +31,14 @@ class GeminiInvoiceProcessor:
         genai.configure(api_key=app_settings.ai_model.GEMINI_API_KEY)
         self.vision_mode = vision_mode
 
-        # Generate schema for Controlled Generation
-        # This FORCES Gemini to comply with the exact Pydantic structure
-        response_schema = Invoice.model_json_schema()
-
         self._client = genai.GenerativeModel(
             model_name=app_settings.ai_model.GEMINI_MODEL_NAME,
             generation_config={
                 "response_mime_type": "application/json",
-                "response_schema": response_schema,  # Controlled Generation
                 "temperature": 0.1,
             }
         )
-        logger.info(f"Gemini processor initialized in {'VISION' if vision_mode else 'TEXT'} mode with Controlled Generation")
+        logger.info(f"Gemini processor initialized in {'VISION' if vision_mode else 'TEXT'} mode with semantic ontology")
 
     async def _warm_up_connection(self):
         """A simple check to ensure the API key is valid during startup."""
@@ -57,17 +52,19 @@ class GeminiInvoiceProcessor:
     async def structure_invoice_data_from_text(self, ocr_text: str) -> Tuple[Optional[Invoice], Dict[str, Any]]:
         """
         Structures invoice data from OCR text, returning a Pydantic Invoice object.
-        Uses centralized prompt from prompts.py with EN16931/UBL extensibility support.
-        Uses Controlled Generation (response_schema) for strict schema compliance.
+        Uses comprehensive prompt with semantic ontology and few-shot learning.
         """
-        logger.info("Structuring invoice data from OCR text with Gemini Controlled Generation.")
+        logger.info("Structuring invoice data from OCR text with Gemini JSON mode + semantic guidance.")
 
         try:
-            # Use the centralized, comprehensive prompt WITHOUT schema duplication
-            # Schema is enforced via response_schema in generation_config
-            full_prompt = get_structuring_prompt() + ocr_text
+            # Generate dynamic schema from Pydantic model
+            schema = Invoice.model_json_schema()
+            schema_str = json.dumps(schema, indent=2)
 
-            # Call Gemini with Controlled Generation
+            # Use the comprehensive prompt with schema, semantic ontology, and few-shot example
+            full_prompt = get_structuring_prompt(schema_str) + ocr_text
+
+            # Call Gemini with JSON mode
             response = await self._client.generate_content_async(full_prompt)
 
             # Parse the JSON response
@@ -111,7 +108,7 @@ class GeminiInvoiceProcessor:
         - Better at identifying summary sections vs breakdowns
         - Understands spatial layout and document hierarchy
         - More accurate for multi-page consolidated invoices
-        - Uses Controlled Generation (response_schema) for strict schema compliance
+        - Enhanced with semantic ontology and few-shot learning
 
         Args:
             images: List of PIL Images (PDF pages converted to images)
@@ -119,20 +116,23 @@ class GeminiInvoiceProcessor:
         Returns:
             Tuple of (Invoice object or None, metadata dict)
         """
-        logger.info(f"Structuring invoice data from {len(images)} images with Gemini Vision + Controlled Generation.")
+        logger.info(f"Structuring invoice data from {len(images)} images with Gemini Vision + semantic guidance.")
 
         try:
-            # Use the centralized, comprehensive prompt WITHOUT schema duplication
-            # Schema is enforced via response_schema in generation_config
-            prompt = get_structuring_prompt()
+            # Generate dynamic schema from Pydantic model
+            schema = Invoice.model_json_schema()
+            schema_str = json.dumps(schema, indent=2)
+
+            # Use the comprehensive prompt with schema, semantic ontology, and few-shot example
+            prompt = get_structuring_prompt(schema_str)
 
             # Prepare content for multimodal request: [prompt, image1, image2, ...]
             content = [prompt]
             content.extend(images)
 
-            logger.info(f"Sending {len(images)} images to Gemini Flash-Lite Vision with Controlled Generation...")
+            logger.info(f"Sending {len(images)} images to Gemini Flash-Lite Vision with semantic ontology...")
 
-            # Call Gemini with multimodal content (text + images) + Controlled Generation
+            # Call Gemini with multimodal content (text + images)
             response = await self._client.generate_content_async(content)
 
             # Parse the JSON response

@@ -4,17 +4,22 @@ Centralized Prompts for Gemini Engines.
 This module follows EN16931/UBL extensibility patterns for invoice data extraction.
 """
 
-def get_structuring_prompt() -> str:
+def get_structuring_prompt(json_schema: str) -> str:
     """
-    Generates the comprehensive structuring prompt for Gemini Controlled Generation.
+    Generates the comprehensive structuring prompt with semantic ontology and few-shot learning.
 
-    When using Controlled Generation with response_schema, the schema is passed
-    separately in generation_config and should NOT be included in the prompt text.
+    This approach uses JSON mode with the schema embedded in the prompt, combined with:
+    - Semantic Ontology: Clear field classification rules
+    - Few-Shot Learning: Complete example showing correct extraction pattern
+    - Domain-Specific Instructions: Special handling for utility bills and multi-period invoices
+
+    Args:
+        json_schema: The JSON schema string from Invoice.model_json_schema()
 
     Returns:
-        Complete prompt ready to be sent to Gemini (without schema duplication)
+        Complete prompt ready to be sent to Gemini
     """
-    return """[SYSTEM]
+    return f"""[SYSTEM]
 You are a world-class AI engine for invoice processing. Your primary function is to convert raw OCR text from any invoice layout into a structured, accurate JSON object. You process invoices from any industry, country, and format while maintaining strict adherence to the provided text.
 
 [TASK]
@@ -496,10 +501,17 @@ Subtotal regularización:         5,02 €
 
 6. **Page 2 and 3 values IGNORED**: Only summary values from page 1 used
 
-[FINAL INSTRUCTIONS]
+[OUTPUT SCHEMA]
 Return ONLY valid JSON without markdown code blocks or additional text.
-The JSON structure is enforced by Gemini Controlled Generation (response_schema).
-Focus on accurate data extraction following all rules above.
+The JSON must strictly conform to the following Pydantic model schema:
+
+{json_schema}
+
+**REMEMBER:**
+- Items = goods/services only
+- Taxes = government taxes with rates and amounts from RESUMEN
+- Surcharges = vendor fees (Recargo, Alquiler)
+- Extract financial values from SUMMARY section only
 
 [OCR TEXT TO PROCESS]
 """
