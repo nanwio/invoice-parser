@@ -112,6 +112,25 @@ class InvoiceCacheService:
         except Exception as e:
             return {"cache_enabled": False, "error": str(e)}
 
+    def clear_all_cache(self) -> dict:
+        """Clear all cached invoices. Use after prompt updates to force re-processing."""
+        if not self._redis_client:
+            return {"success": False, "message": "Cache not enabled"}
+
+        try:
+            # Get all invoice keys
+            keys = self._redis_client.keys("invoice:*")
+            if keys:
+                deleted_count = self._redis_client.delete(*keys)
+                logger.info(f"Cleared {deleted_count} cached invoices")
+                return {"success": True, "deleted_count": deleted_count}
+            else:
+                logger.info("No cached invoices to clear")
+                return {"success": True, "deleted_count": 0}
+        except Exception as e:
+            logger.error(f"Error clearing cache: {e}")
+            return {"success": False, "error": str(e)}
+
 
 # Global cache instance
 invoice_cache = InvoiceCacheService()

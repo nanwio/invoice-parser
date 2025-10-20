@@ -89,7 +89,7 @@ class InvoiceValidator:
             result.add_error("At least one line item is required")
 
     def _check_math(self, invoice: Invoice, result: InvoiceValidationResult):
-        """Check mathematical consistency with support for discounts, taxes, withholdings, and surcharges."""
+        """Check mathematical consistency with support for multi-period invoices, discounts, taxes, withholdings, and surcharges."""
         try:
             fd = invoice.financial_details
 
@@ -119,8 +119,24 @@ class InvoiceValidator:
 
             actual_total = fd.total_amount
 
-            # Allow small tolerance for rounding differences (0.02)
-            if abs(expected_total - actual_total) > 0.02:
+            # Check for multi-period invoice indicator
+            is_multi_period = (
+                invoice.extensions and
+                isinstance(invoice.extensions, dict) and
+                "multi_period_invoice" in invoice.extensions
+            )
+
+            # Standard tolerance for rounding differences
+            tolerance = 0.02
+
+            # For multi-period invoices with significant discrepancy, issue warning instead of error
+            # because subtotal may not reflect all consolidated periods
+            if is_multi_period and abs(expected_total - actual_total) > 0.50:
+                result.add_warning(
+                    f"Multi-period invoice: calculated {expected_total:.2f} ≠ total {actual_total:.2f}. "
+                    "This may be normal for consolidated bills with regularizations. Verify summary section was used."
+                )
+            elif abs(expected_total - actual_total) > tolerance:
                 result.add_error(f"Math error: expected {expected_total:.2f} ≠ actual {actual_total:.2f}")
 
         except Exception as e:

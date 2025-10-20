@@ -158,7 +158,7 @@ class FinancialDetails(BaseModel):
     )
     subtotal: float = Field(
         ...,
-        description="Sum of all line items before any taxes, discounts, or adjustments"
+        description="Sum of all line items BEFORE any taxes, discounts, or adjustments. For multi-period invoices, use the consolidated value from the summary section, NOT the sum of period breakdowns."
     )
     discount: Optional[Discount] = Field(
         None,
@@ -166,11 +166,11 @@ class FinancialDetails(BaseModel):
     )
     tax: Tax = Field(
         ...,
-        description="Primary tax applied (IVA, IGIC, VAT, GST, etc.)"
+        description="Primary tax applied (IVA, IGIC, VAT, GST, etc.). CRITICAL: Extract from the summary/total section ONLY, NOT from period-specific breakdowns. Must be 100% accurate."
     )
     additional_taxes: Optional[list[Tax]] = Field(
         default_factory=list,
-        description="Additional taxes if multiple tax types apply"
+        description="Additional taxes if multiple tax types apply (e.g., Electricity Tax, Environmental Tax). Extract from summary section ONLY. Each must have accurate type, rate, and amount."
     )
     withholding: Optional[Withholding] = Field(
         None,
