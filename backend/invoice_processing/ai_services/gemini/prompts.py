@@ -206,7 +206,10 @@ These fields are ALWAYS extracted when present:
 
 **Financial Details:**
 - `currency`: ISO 4217 code (EUR, USD, GBP) or symbol (€, $, £)
-- `subtotal`: Amount before taxes/adjustments. For multi-period invoices, use the consolidated value from the summary section, NOT the sum of period breakdowns.
+- `subtotal`: **Sum of line items ONLY** (goods/services being sold). DO NOT include surcharges, discounts, or taxes in subtotal.
+  - **Example calculation**: items[12.50€ + 21.88€] = 34.38€ subtotal
+  - **WRONG**: Including surcharges or taxes in subtotal
+  - For multi-period invoices, use the consolidated item values from summary, NOT period breakdowns.
 - `tax`: Primary tax details - **CRITICAL: Extract from SUMMARY section ONLY**
   - **For utility bills:** Use value from "RESUMEN DE LA FACTURA", NOT from "DESGLOSE PERIODO"
   - **Example:** "RESUMEN: Impuesto electricidad 2,16 €" → amount: 2.16 ✅
@@ -225,6 +228,7 @@ These fields are ALWAYS extracted when present:
   - Common: "Impuesto electricidad", "IGIC normal/reducido", Environmental taxes
   - Each needs: type (use "IGIC" for IGIC taxes, "OTHER" for others), rate, amount
   - **CRITICAL**: Use consolidated totals from page 1 summary, ignore period breakdowns from pages 2+
+  - **IMPORTANT**: Extract ALL tax lines from RESUMEN, even small amounts (e.g., 0.05€). Do not skip any tax.
 - `withholding`: Tax retention/withholding (e.g., I.R.P.F., Income Tax)
   - `type`: Name of withholding
   - `rate`: Percentage
