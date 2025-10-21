@@ -237,6 +237,15 @@ These fields are ALWAYS extracted when present:
     - Use `OTHER` for ANY other tax type (Electricity Tax, Environmental Tax, etc.)
   - `rate`: Percentage (e.g., 5.11 for 5.11%)
   - `amount`: Tax amount **FROM SUMMARY ONLY**
+  - **MULTIPLE TAX RATES - HOW TO CHOOSE PRIMARY:**
+    - If invoice has multiple rates of the SAME tax type (e.g., IGIC 3%, IGIC 7%, IGIC 15%):
+      1. Calculate which rate represents the LARGEST tax amount
+      2. Use that rate as the PRIMARY tax in this field
+      3. Put ALL OTHER rates (even if same type) in `additional_taxes[]`
+    - **Example:** IGIC breakdown: 3% (0.73€), 7% (3.12€), 0% (0€), 15% (0.45€)
+      → PRIMARY tax: type=IGIC, rate=7.0, amount=3.12 (largest amount)
+      → additional_taxes: [{{type=IGIC, rate=3.0, amount=0.73}}, {{type=IGIC, rate=15.0, amount=0.45}}]
+      → Omit 0% rates from additional_taxes (no value)
 - `additional_taxes`: Array of additional taxes - **Extract from SUMMARY section ONLY**
   - **For utility bills:** Use values from "RESUMEN", ignore all "DESGLOSE" sections
   - **Example:** "RESUMEN: IGIC reducido 1,34 €" → amount: 1.34 ✅
@@ -248,12 +257,16 @@ These fields are ALWAYS extracted when present:
   - **SPECIAL CASE - Tax Tables**: If invoice shows "Base IGIC:" table with multiple rates:
     ```
     Base IGIC:
-    24,29   3,0%    0,73  → Extract this (type: IGIC, rate: 3.0, amount: 0.73)
-    44,56   7,0%    3,12  → Extract this (type: IGIC, rate: 7.0, amount: 3.12)
+    24,29   3,0%    0,73  → Extract as additional_taxes (type: IGIC, rate: 3.0, amount: 0.73)
+    44,56   7,0%    3,12  → Extract as PRIMARY tax (type: IGIC, rate: 7.0, amount: 3.12) - LARGEST amount
 
     I.G.I.C. ......: 3,85  → IGNORE (this is just the sum, no rate)
     ```
-    **RULE**: Only extract tax lines that have a RATE (%). Ignore sum lines without rates.
+    **RULES**:
+    1. Only extract tax lines that have a RATE (%). Ignore sum lines without rates.
+    2. The line with the LARGEST amount becomes the PRIMARY tax
+    3. All other lines go to `additional_taxes[]`
+    4. Skip rates with 0€ amount (no actual tax charged)
 - `withholding`: Tax retention/withholding (e.g., I.R.P.F., Income Tax)
   - `type`: Name of withholding
   - `rate`: Percentage
@@ -365,6 +378,7 @@ The JSON must strictly conform to the following Pydantic model schema:
 - Taxes = government taxes with rates and amounts from RESUMEN
 - Surcharges = vendor fees (Recargo, Alquiler)
 - Extract financial values from SUMMARY section only
+- **Multiple tax rates:** PRIMARY tax = largest amount, ALL OTHERS go to additional_taxes[]
 
 [OCR TEXT TO PROCESS]
 """

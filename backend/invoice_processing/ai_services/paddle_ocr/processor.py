@@ -8,6 +8,7 @@ from typing import Optional, Any, List, Dict
 from .config import PaddleConfig
 from .image_handler import ImageHandler
 from .ocr_executor import OcrExecutor
+from .table_processor import InvoiceTableProcessor
 
 
 class PaddleOCRProvider:
@@ -46,38 +47,74 @@ class PaddleOCRProvider:
 
 class PaddleProcessor:
     """
-    Orchestrates the invoice processing pipeline using PaddleOCR.
+    Orchestrates the invoice processing pipeline using PaddleOCR with table recognition.
     """
 
-    def __init__(self):
+    def __init__(self, use_table_recognition: bool = True):
         """
-        Initializes the PaddleProcessor, getting dependencies from the provider.
+        Initializes the PaddleProcessor.
+
+        Args:
+            use_table_recognition: If True, use specialized table modules (recommended for invoices)
         """
-        self.ocr_engine = PaddleOCRProvider.get_engine()
-        self.engine_lock = PaddleOCRProvider.get_lock()
+        self.use_table_recognition = use_table_recognition
         self.image_handler = ImageHandler()
-        self.ocr_executor = OcrExecutor(self.ocr_engine, self.engine_lock, self.image_handler)
+
+        if use_table_recognition:
+            # Use specialized table processor for invoices
+            try:
+                self.table_processor = InvoiceTableProcessor()
+                logger.info("Using table recognition mode for invoice processing")
+            except ImportError as e:
+                logger.warning(f"Table recognition unavailable: {e}. Falling back to standard OCR")
+                self.use_table_recognition = False
+
+        if not use_table_recognition:
+            # Fallback to standard OCR
+            self.ocr_engine = PaddleOCRProvider.get_engine()
+            self.engine_lock = PaddleOCRProvider.get_lock()
+            self.ocr_executor = OcrExecutor(self.ocr_engine, self.engine_lock, self.image_handler)
 
     async def process_pdf_async(self, pdf_path: str) -> List[Dict[str, Any]]:
         """
         Processes a PDF and returns structured text page by page.
+
+        Uses table recognition if enabled, otherwise falls back to standard OCR.
         """
-        logger.info(f"Starting async OCR for PDF: {pdf_path}")
+        logger.info(f"Starting async {'table recognition' if self.use_table_recognition else 'OCR'} for PDF: {pdf_path}")
+
         try:
-            image_generator = self.image_handler.convert_pdf_to_images(pdf_path)
-            return await self.ocr_executor.run_ocr_on_images_parallel(image_generator)
+            if self.use_table_recognition:
+                # Use table processor for better structure preservation
+                images = list(self.image_handler.convert_pdf_to_images(pdf_path))
+                results = await self.table_processor.process_images_parallel(images)
+                return results
+            else:
+                # Fallback to standard OCR
+                image_generator = self.image_handler.convert_pdf_to_images(pdf_path)
+                return await self.ocr_executor.run_ocr_on_images_parallel(image_generator)
         finally:
             gc.collect()
 
     async def process_image_async(self, image_bytes: bytes) -> List[Dict[str, Any]]:
         """
         Processes a single image and returns structured text.
+
+        Uses table recognition if enabled, otherwise falls back to standard OCR.
         """
-        logger.info("Starting async OCR for single image")
+        logger.info(f"Starting async {'table recognition' if self.use_table_recognition else 'OCR'} for single image")
+
         try:
             image = self.image_handler.convert_bytes_to_image(image_bytes)
-            image_generator = (img for img in [image])
-            return await self.ocr_executor.run_ocr_on_images_parallel(image_generator)
+
+            if self.use_table_recognition:
+                # Use table processor for better structure preservation
+                results = await self.table_processor.process_images_parallel([image])
+                return results
+            else:
+                # Fallback to standard OCR
+                image_generator = (img for img in [image])
+                return await self.ocr_executor.run_ocr_on_images_parallel(image_generator)
         finally:
             gc.collect()
 

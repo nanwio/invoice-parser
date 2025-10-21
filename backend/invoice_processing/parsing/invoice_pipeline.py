@@ -176,6 +176,10 @@ class InvoiceProcessor:
                 structuring_start = time.perf_counter()
 
                 formatted_text = self._format_ocr_results_for_llm(ocr_results)
+
+                # DEBUG: Log OCR text to analyze quality
+                logger.debug(f"OCR extracted text ({len(formatted_text)} chars):\n{formatted_text[:2000]}...")
+
                 invoice, gemini_metadata = await self.gemini_processor.structure_invoice_data_from_text(formatted_text)
 
                 structuring_time = time.perf_counter() - structuring_start
