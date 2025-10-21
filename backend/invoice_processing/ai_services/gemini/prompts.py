@@ -6,18 +6,18 @@ This module follows EN16931/UBL extensibility patterns for invoice data extracti
 
 def get_structuring_prompt(json_schema: str) -> str:
     """
-    Generates the comprehensive structuring prompt with semantic ontology and few-shot learning.
+    Generates the optimized structuring prompt with semantic ontology.
 
     This approach uses JSON mode with the schema embedded in the prompt, combined with:
     - Semantic Ontology: Clear field classification rules
-    - Few-Shot Learning: Complete example showing correct extraction pattern
+    - Critical Extraction Priority: RESUMEN-first rule for multi-page invoices
     - Domain-Specific Instructions: Special handling for utility bills and multi-period invoices
 
     Args:
         json_schema: The JSON schema string from Invoice.model_json_schema()
 
     Returns:
-        Complete prompt ready to be sent to Gemini
+        Complete prompt ready to be sent to Gemini (~20k chars, optimized for attention)
     """
     return f"""[SYSTEM]
 You are a world-class AI engine for invoice processing. Your primary function is to convert raw OCR text from any invoice layout into a structured, accurate JSON object. You process invoices from any industry, country, and format while maintaining strict adherence to the provided text.
@@ -324,182 +324,6 @@ Identify the invoice type and extract relevant contextual data into the `extensi
 ```
 
 **General Rule**: If you identify contextual information that doesn't fit core fields but is clearly important (property details, shipment info, project codes, etc.), add it to `extensions` with a descriptive key.
-
-[FEW-SHOT EXAMPLE - UTILITY BILL]
-**This example demonstrates CORRECT extraction for a complex multi-page electricity invoice.**
-
-**INPUT OCR TEXT:**
-```
-[INICIO PÁGINA 1]
-ENDESA ENERGÍA, S.A.U.
-CIF: A81948077
-
-Cliente: JUAN PÉREZ GARCÍA
-NIF: 12345678Z
-Dirección suministro: Calle Ejemplo 123, Las Palmas
-
-FACTURA Nº: 012025-INAG
-Fecha emisión: 15/01/2025
-Forma de pago: Domiciliada
-Cuenta bancaria: ES50305813007810118****
-
-RESUMEN DE LA FACTURA
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-Por potencia contratada         12,50 €
-Por energía consumida            21,88 €
-Recargo del 20%                   7,05 €
-Alquiler del contador             0,72 €
-Impuesto sobre la electricidad
-  5,11%                           2,16 €
-IGIC reducido 3%                  1,34 €
-IGIC general 7%                   0,05 €
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-TOTAL IMPORTE FACTURA           46,61 €
-
-Ver siguientes páginas para desglose detallado.
-[FIN PÁGINA 1]
-
-[INICIO PÁGINA 2]
-DESGLOSE EN EL PERIODO ACTUAL
-Del 15/12/2024 al 15/01/2025
-
-Nota: Esta sección corresponde al periodo actual únicamente.
-
-Por potencia contratada         10,50 €
-Por energía consumida            18,20 €
-Impuesto sobre la electricidad
-  5,11%                           1,82 €
-IGIC reducido 3%                  1,12 €
-
-Subtotal periodo actual:        31,64 €
-[FIN PÁGINA 2]
-
-[INICIO PÁGINA 3]
-REGULARIZACIÓN DE PERIODO ANTERIOR
-Del 15/11/2024 al 15/12/2024
-
-Facturado anteriormente:         2,00 €
-Ajuste por regularización:       2,68 €
-Impuesto electricidad ajuste:    0,34 €
-
-Subtotal regularización:         5,02 €
-[FIN PÁGINA 3]
-```
-
-**CORRECT OUTPUT:**
-```json
-{{
-  "metadata": {{
-    "invoice_number": "012025-INAG",
-    "issue_date": "2025-01-15",
-    "due_date": null,
-    "order_number": null
-  }},
-  "notes": "Ver siguientes páginas para desglose detallado.",
-  "parties": {{
-    "vendor": {{
-      "name": "ENDESA ENERGÍA, S.A.U.",
-      "tax_id": "A81948077",
-      "contact": null,
-      "address": null
-    }},
-    "customer": {{
-      "name": "JUAN PÉREZ GARCÍA",
-      "tax_id": "12345678Z",
-      "contact": null,
-      "address": {{
-        "street": "Calle Ejemplo 123",
-        "city": "Las Palmas",
-        "state": null,
-        "postal_code": null,
-        "country": "España"
-      }}
-    }}
-  }},
-  "financial_details": {{
-    "currency": "EUR",
-    "subtotal": 34.38,
-    "discount": null,
-    "tax": {{
-      "type": "OTHER",
-      "rate": 5.11,
-      "amount": 2.16
-    }},
-    "additional_taxes": [
-      {{
-        "type": "IGIC",
-        "rate": 3.0,
-        "amount": 1.34
-      }},
-      {{
-        "type": "IGIC",
-        "rate": 7.0,
-        "amount": 0.05
-      }}
-    ],
-    "withholding": null,
-    "surcharges": [
-      {{
-        "description": "Recargo del 20%",
-        "amount": 7.05
-      }},
-      {{
-        "description": "Alquiler del contador",
-        "amount": 0.72
-      }}
-    ],
-    "total_amount": 46.61,
-    "payment": {{
-      "method": "BANK_TRANSFER",
-      "number": "ES50305813007810118****"
-    }}
-  }},
-  "items": [
-    {{
-      "item_id": null,
-      "description": "Por potencia contratada",
-      "quantity": 1,
-      "unit_price": 12.50,
-      "line_total": 12.50
-    }},
-    {{
-      "item_id": null,
-      "description": "Por energía consumida",
-      "quantity": 1,
-      "unit_price": 21.88,
-      "line_total": 21.88
-    }}
-  ],
-  "extensions": {{
-    "multi_period_invoice": {{
-      "has_regularizations": true,
-      "number_of_periods": 2,
-      "total_consolidated": 46.61,
-      "note": "Incluye regularización de periodo anterior"
-    }}
-  }}
-}}
-```
-
-**KEY OBSERVATIONS FROM THIS EXAMPLE:**
-
-1. **Items ONLY contain goods/services**: potencia (12.50€) and energía (21.88€)
-   - ❌ NOT: taxes, surcharges, or fees
-
-2. **Taxes extracted from RESUMEN on page 1**:
-   - Impuesto electricidad: 2.16€ (NOT 1.82€ from page 2)
-   - IGIC reducido: 1.34€ (NOT 1.12€ from page 2)
-   - IGIC general: 0.05€
-
-3. **Surcharges separated from items**:
-   - Recargo del 20%: 7.05€
-   - Alquiler del contador: 0.72€
-
-4. **Payment method inferred**: "Domiciliada" → BANK_TRANSFER
-
-5. **Multi-period detected**: extensions.multi_period_invoice indicates regularizations present
-
-6. **Page 2 and 3 values IGNORED**: Only summary values from page 1 used
 
 [OUTPUT SCHEMA]
 Return ONLY valid JSON without markdown code blocks or additional text.

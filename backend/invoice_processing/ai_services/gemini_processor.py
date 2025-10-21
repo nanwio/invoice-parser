@@ -67,8 +67,22 @@ class GeminiInvoiceProcessor:
             # Call Gemini with JSON mode
             response = await self._client.generate_content_async(full_prompt)
 
-            # Parse the JSON response
+            # Parse the JSON response and strip markdown code blocks
             json_text = response.text.strip()
+
+            # Remove markdown code blocks if present
+            if json_text.startswith('```'):
+                # Remove opening ```json or ```
+                lines = json_text.split('\n', 1)
+                if len(lines) > 1:
+                    json_text = lines[1]
+
+            if json_text.endswith('```'):
+                # Remove closing ```
+                json_text = json_text.rsplit('\n```', 1)[0]
+
+            json_text = json_text.strip()
+
             invoice_dict = json.loads(json_text)
 
             # Validate and create Pydantic object
@@ -157,7 +171,7 @@ class GeminiInvoiceProcessor:
                     if hasattr(candidate, 'safety_ratings'):
                         logger.info(f"🔍 DEBUG - Candidate {i} safety_ratings: {candidate.safety_ratings}")
 
-            # Parse the JSON response
+            # Parse the JSON response and strip markdown code blocks
             json_text = response.text.strip()
 
             if not json_text:
@@ -168,6 +182,20 @@ class GeminiInvoiceProcessor:
                     "prompt_size": prompt_size,
                     "mode": "vision"
                 }
+
+            # Remove markdown code blocks if present
+            if json_text.startswith('```'):
+                logger.info("🔧 Stripping markdown code block wrapper from response")
+                # Remove opening ```json or ```
+                lines = json_text.split('\n', 1)
+                if len(lines) > 1:
+                    json_text = lines[1]
+
+            if json_text.endswith('```'):
+                # Remove closing ```
+                json_text = json_text.rsplit('\n```', 1)[0]
+
+            json_text = json_text.strip()
 
             invoice_dict = json.loads(json_text)
 
