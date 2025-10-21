@@ -221,7 +221,7 @@ These fields are ALWAYS extracted when present:
 - `customer`: Entity receiving the invoice (same structure as vendor)
 
 **Financial Details:**
-- `currency`: ISO 4217 code (EUR, USD, GBP) or symbol (€, $, £)
+- `currency`: **ISO 4217 3-letter code ONLY** (EUR, USD, GBP). If you see symbols, convert: €→EUR, $→USD, £→GBP
 - `subtotal`: **Sum of line items ONLY** (goods/services being sold). DO NOT include surcharges, discounts, or taxes in subtotal.
   - **Example calculation**: items[12.50€ + 21.88€] = 34.38€ subtotal
   - **WRONG**: Including surcharges or taxes in subtotal
@@ -245,6 +245,15 @@ These fields are ALWAYS extracted when present:
   - Each needs: type (use "IGIC" for IGIC taxes, "OTHER" for others), rate, amount
   - **CRITICAL**: Use consolidated totals from page 1 summary, ignore period breakdowns from pages 2+
   - **IMPORTANT**: Extract ALL tax lines from RESUMEN, even small amounts (e.g., 0.05€). Do not skip any tax.
+  - **SPECIAL CASE - Tax Tables**: If invoice shows "Base IGIC:" table with multiple rates:
+    ```
+    Base IGIC:
+    24,29   3,0%    0,73  → Extract this (type: IGIC, rate: 3.0, amount: 0.73)
+    44,56   7,0%    3,12  → Extract this (type: IGIC, rate: 7.0, amount: 3.12)
+
+    I.G.I.C. ......: 3,85  → IGNORE (this is just the sum, no rate)
+    ```
+    **RULE**: Only extract tax lines that have a RATE (%). Ignore sum lines without rates.
 - `withholding`: Tax retention/withholding (e.g., I.R.P.F., Income Tax)
   - `type`: Name of withholding
   - `rate`: Percentage
