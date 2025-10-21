@@ -1,57 +1,58 @@
 """
-Invoice Table Processor using PaddleOCR specialized table modules.
+Invoice Table Processor using PaddleOCR PPStructure (v2.7.3).
 
-This module uses TableStructureRecognition and DocImgOrientationClassification
-to properly extract structured data from invoice tables, preserving column-row relationships.
+This module uses PPStructure to properly extract structured data from invoice tables,
+preserving column-row relationships through table recognition and OCR.
 """
 import asyncio
 from typing import List, Dict, Any
 from loguru import logger
 from PIL import Image
+import numpy as np
 import html
 
 try:
-    from paddleocr import TableStructureRecognition, DocImgOrientationClassification
+    from paddleocr import PPStructure
     PADDLE_TABLE_AVAILABLE = True
 except ImportError:
-    logger.warning("PaddleOCR table modules not available. Install paddleocr>=2.7")
+    logger.warning("PaddleOCR PPStructure not available. Install paddleocr>=2.7")
     PADDLE_TABLE_AVAILABLE = False
 
 
 class InvoiceTableProcessor:
     """
-    Processes invoice pages with tables using specialized PaddleOCR modules.
+    Processes invoice pages with tables using PaddleOCR PPStructure (v2.7.3).
 
-    Uses:
-    - DocImgOrientationClassification: Detects and corrects document rotation
-    - TableStructureRecognition: Extracts table structure as HTML
+    Uses PPStructure for:
+    - Layout analysis and table detection
+    - Structured table recognition with OCR
+    - Document orientation detection
     """
 
     def __init__(self):
-        """Initialize table processing models."""
+        """Initialize PPStructure for table processing."""
         if not PADDLE_TABLE_AVAILABLE:
-            raise ImportError("PaddleOCR table modules not installed")
+            raise ImportError("PaddleOCR PPStructure not installed")
 
-        logger.info("Initializing Invoice Table Processor with PaddleOCR specialized modules")
+        logger.info("Initializing Invoice Table Processor with PaddleOCR PPStructure")
 
-        # Orientation classifier (very fast: ~0.6ms)
-        self.orientation_classifier = DocImgOrientationClassification(
-            model_name="PP-LCNet_x1_0_doc_ori",
-            enable_hpi=True  # High-performance mode
+        # Initialize PPStructure with optimized parameters for invoices
+        self.structure_engine = PPStructure(
+            show_log=False,
+            table=True,              # Enable table recognition (critical for invoices)
+            ocr=True,                # Enable OCR within tables
+            layout=False,            # Disable full layout analysis (focus on tables only)
+            image_orientation=True,  # Enable rotation detection and correction
+            lang='es',               # Spanish language for OCR
+            use_gpu=False,
+            enable_mkldnn=True,      # Intel CPU optimization (for Cloud Run)
         )
 
-        # Table structure recognizer (SLANet_plus: best for complex tables)
-        self.table_recognizer = TableStructureRecognition(
-            model_name="SLANet_plus",  # 63.69% accuracy, improved for complex/wireless tables
-            enable_hpi=True,  # High-performance mode
-            batch_size=1
-        )
-
-        logger.success("Table processing models loaded successfully")
+        logger.success("PPStructure table processor loaded successfully")
 
     async def process_image_async(self, image: Image.Image, page_num: int) -> Dict[str, Any]:
         """
-        Process a single invoice page image with table structure recognition.
+        Process a single invoice page image with PPStructure table recognition.
 
         Args:
             image: PIL Image of the invoice page
@@ -61,55 +62,68 @@ class InvoiceTableProcessor:
             Dictionary with:
                 - page_number: int
                 - text: Structured text representation
-                - html: Raw HTML table structure
+                - html: Raw HTML table structure (if tables found)
                 - structure_score: Confidence score
         """
-        logger.debug(f"Processing page {page_num} with table recognition")
+        logger.debug(f"Processing page {page_num} with PPStructure")
 
-        # Step 1: Detect and correct orientation (async)
-        orientation_result = await asyncio.to_thread(
-            self.orientation_classifier.predict,
-            image,
-            batch_size=1
-        )
+        # Convert PIL Image to numpy array (PPStructure expects numpy)
+        img_array = np.array(image)
 
-        orientation_class = orientation_result[0]["class_ids"][0]
-        orientation_angles = {0: 0, 1: 90, 2: 180, 3: 270}
-        angle = orientation_angles.get(orientation_class, 0)
+        # Process image with PPStructure (async to avoid blocking)
+        result = await asyncio.to_thread(self.structure_engine, img_array)
 
-        if angle != 0:
-            logger.info(f"Page {page_num} rotated {angle}° - correcting orientation")
-            image = image.rotate(-angle, expand=True)  # Counter-rotate to correct
+        # PPStructure returns list of regions: [{'type': 'Table'|'Figure'|..., 'bbox': [...], 'res': ...}]
+        logger.debug(f"Page {page_num}: Found {len(result)} regions")
 
-        # Step 2: Recognize table structure (async)
-        table_result = await asyncio.to_thread(
-            self.table_recognizer.predict,
-            image,
-            batch_size=1
-        )
+        # Extract tables and combine into structured text
+        all_html = []
+        all_text_parts = []
+        table_count = 0
 
-        # Extract HTML structure and confidence
-        html_structure = table_result[0]["structure"]  # List of HTML tokens
-        structure_score = table_result[0].get("structure_score", 0.0)
+        for region in result:
+            region_type = region.get('type', 'Unknown')
 
-        # Convert token list to HTML string
-        html_str = "".join(html_structure)
+            if region_type == 'table':
+                # Table region - extract HTML structure
+                table_count += 1
+                html_content = region.get('res', {}).get('html', '')
 
-        logger.debug(f"Page {page_num}: Table structure extracted (score: {structure_score:.2f})")
+                if html_content:
+                    all_html.append(html_content)
+                    # Convert HTML to structured text for Gemini
+                    text_repr = self._html_table_to_text(html_content, page_num, table_count)
+                    all_text_parts.append(text_repr)
+                    logger.debug(f"Page {page_num}: Extracted table {table_count}")
 
-        # Step 3: Convert HTML table to structured text for Gemini
-        structured_text = self._html_table_to_text(html_str, page_num)
+            elif region_type == 'figure':
+                # Skip figures for now (invoices are primarily text/tables)
+                logger.debug(f"Page {page_num}: Skipping figure region")
+
+            else:
+                # Other content (text, titles, etc.)
+                logger.debug(f"Page {page_num}: Found {region_type} region")
+
+        # Combine all extracted content
+        combined_html = "\n".join(all_html) if all_html else ""
+        combined_text = "\n\n".join(all_text_parts) if all_text_parts else ""
+
+        # If no tables found, extract all text from OCR results
+        if not combined_text and result:
+            combined_text = self._extract_all_text_from_regions(result, page_num)
+
+        logger.info(f"Page {page_num}: Extracted {table_count} tables, text length: {len(combined_text)}")
 
         return {
             "page_number": page_num,
-            "text": structured_text,
-            "html": html_str,
-            "structure_score": structure_score,
-            "orientation_corrected": angle != 0,
-            "rotation_angle": angle
+            "text": combined_text,
+            "html": combined_html,
+            "structure_score": 1.0,  # PPStructure doesn't provide a single confidence score
+            "table_count": table_count,
+            "region_count": len(result)
         }
 
-    def _html_table_to_text(self, html_str: str, page_num: int) -> str:
+    def _html_table_to_text(self, html_str: str, page_num: int, table_num: int = 1) -> str:
         """
         Convert HTML table structure to clean text format for Gemini.
 
@@ -123,14 +137,16 @@ class InvoiceTableProcessor:
             # This preserves structure while being LLM-friendly
             text = clean_html.replace("<html><body>", "")
             text = text.replace("</body></html>", "")
-            text = text.replace("<table>", f"\n[TABLE PAGE {page_num}]\n")
+            text = text.replace("<table>", f"\n[TABLE {table_num} - PAGE {page_num}]\n")
             text = text.replace("</table>", "\n[END TABLE]\n")
             text = text.replace("<tr>", "\n[ROW] ")
             text = text.replace("</tr>", " [/ROW]")
             text = text.replace("<td>", "[CELL] ")
             text = text.replace("</td>", " [/CELL] ")
-            text = text.replace("<thead>", "[HEADER] ")
-            text = text.replace("</thead>", " [/HEADER]\n")
+            text = text.replace("<th>", "[HEADER] ")
+            text = text.replace("</th>", " [/HEADER] ")
+            text = text.replace("<thead>", "")
+            text = text.replace("</thead>", "")
             text = text.replace("<tbody>", "")
             text = text.replace("</tbody>", "")
 
@@ -140,13 +156,46 @@ class InvoiceTableProcessor:
             return text
 
         except Exception as e:
-            logger.error(f"Failed to convert HTML to text for page {page_num}: {e}")
+            logger.error(f"Failed to convert HTML to text for page {page_num}, table {table_num}: {e}")
             # Fallback: return HTML as-is
             return html_str
 
+    def _extract_all_text_from_regions(self, regions: List[Dict[str, Any]], page_num: int) -> str:
+        """
+        Extract all text from PPStructure regions when no tables are found.
+
+        This is a fallback for invoices that don't have clear table structure.
+        """
+        all_text = []
+
+        for idx, region in enumerate(regions):
+            region_type = region.get('type', 'unknown')
+            res = region.get('res', {})
+
+            # Extract text based on region type
+            if isinstance(res, dict):
+                # For structured results (tables, etc.)
+                text_content = res.get('text', '')
+                if text_content:
+                    all_text.append(f"[{region_type.upper()} {idx+1}]\n{text_content}")
+            elif isinstance(res, list):
+                # For OCR results (list of text lines)
+                lines = [line.get('text', '') for line in res if isinstance(line, dict)]
+                if lines:
+                    combined = "\n".join(lines)
+                    all_text.append(f"[{region_type.upper()} {idx+1}]\n{combined}")
+            elif isinstance(res, str):
+                # Direct string content
+                all_text.append(f"[{region_type.upper()} {idx+1}]\n{res}")
+
+        combined = "\n\n".join(all_text)
+        logger.debug(f"Page {page_num}: Extracted {len(all_text)} regions as fallback text")
+
+        return combined if combined else f"[PAGE {page_num} - NO TEXT EXTRACTED]"
+
     async def process_images_parallel(self, images: List[Image.Image]) -> List[Dict[str, Any]]:
         """
-        Process multiple invoice pages in parallel.
+        Process multiple invoice pages in parallel with PPStructure.
 
         Args:
             images: List of PIL Images
@@ -154,7 +203,7 @@ class InvoiceTableProcessor:
         Returns:
             List of processing results (one per page)
         """
-        logger.info(f"Processing {len(images)} pages with table recognition")
+        logger.info(f"Processing {len(images)} pages with PPStructure table recognition")
 
         # Process all pages in parallel
         tasks = [
@@ -165,7 +214,8 @@ class InvoiceTableProcessor:
         results = await asyncio.gather(*tasks)
 
         # Log summary
-        avg_score = sum(r["structure_score"] for r in results) / len(results)
-        logger.info(f"Table processing complete: {len(results)} pages, avg confidence: {avg_score:.2f}")
+        total_tables = sum(r.get("table_count", 0) for r in results)
+        total_regions = sum(r.get("region_count", 0) for r in results)
+        logger.info(f"PPStructure processing complete: {len(results)} pages, {total_tables} tables, {total_regions} total regions")
 
         return results

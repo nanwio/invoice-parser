@@ -2,31 +2,41 @@
 Build-time script to pre-download and cache PaddleOCR models.
 
 This script is executed only during the `docker build` phase.
-It initializes the OCR engine and specialized table recognition models,
+It initializes the OCR engine and PPStructure for table recognition,
 which triggers the download of all necessary models into the default cache directory.
 This ensures the final container image already includes the models,
 significantly speeding up the application's runtime startup (cold start).
 """
-from paddleocr import PaddleOCR, TableStructureRecognition, DocImgOrientationClassification
+from paddleocr import PaddleOCR, PPStructure
 from loguru import logger
 
-logger.info("Starting model caching script...")
+logger.info("Starting PaddleOCR model caching script (v2.7.3)...")
 
 try:
-    # 1. Cache standard OCR models (fallback)
+    # 1. Cache standard OCR models (fallback mode)
     logger.info("Caching standard OCR models (lang='es')...")
-    _ = PaddleOCR(lang='es')
+    _ = PaddleOCR(
+        lang='es',
+        use_angle_cls=True,
+        use_gpu=False,
+        show_log=False,
+        enable_mkldnn=True
+    )
     logger.success("✓ Standard OCR models cached")
 
-    # 2. Cache table structure recognition models (primary for invoices)
-    logger.info("Caching table structure recognition models (SLANet_plus)...")
-    _ = TableStructureRecognition(model_name="SLANet_plus", enable_hpi=True)
-    logger.success("✓ Table structure recognition models cached (SLANet_plus)")
-
-    # 3. Cache document orientation classification models
-    logger.info("Caching document orientation classification models...")
-    _ = DocImgOrientationClassification(model_name="PP-LCNet_x1_0_doc_ori", enable_hpi=True)
-    logger.success("✓ Document orientation models cached")
+    # 2. Cache PPStructure models (primary for invoice table recognition)
+    logger.info("Caching PPStructure models with table recognition...")
+    _ = PPStructure(
+        show_log=False,
+        table=True,              # Enable table recognition
+        ocr=True,                # Enable OCR within tables
+        layout=False,            # No full layout analysis needed
+        image_orientation=True,  # Enable rotation detection
+        lang='es',
+        use_gpu=False,
+        enable_mkldnn=True
+    )
+    logger.success("✓ PPStructure table recognition models cached")
 
     logger.success("All PaddleOCR models have been successfully downloaded and cached!")
 
