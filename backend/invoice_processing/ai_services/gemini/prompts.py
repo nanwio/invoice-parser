@@ -164,6 +164,22 @@ These invoices often have MULTIPLE pages with different values:
    - ✅ "RESUMEN: IGIC reducido 1,34 €" → USE 1.34
    - ❌ "Nota: Esta sección (pág 2): IGIC reducido 1,12 €" → IGNORE
 
+   **HOW TO CLASSIFY EACH LINE IN "RESUMEN DE LA FACTURA":**
+   ```
+   Por potencia contratada    12,50 € → items[0] (service sold)
+   Por energía consumida      21,88 € → items[1] (service sold)
+   Recargo del 20%             7,05 € → surcharges[0] (vendor fee)
+   Impuesto electricidad       2,16 € → tax (government tax, type: OTHER)
+   Alquiler del contador       0,72 € → surcharges[1] (equipment rental)
+   Otros                       0,91 € → surcharges[2] (other charges)
+   IGIC reducido 3%            1,34 € → additional_taxes[0] (type: IGIC)
+   IGIC normal 7%              0,05 € → additional_taxes[1] (type: IGIC)
+
+   subtotal = 12,50 + 21,88 = 34,38 € (ONLY items, NOT surcharges/taxes)
+   ```
+
+   **EXTRACT EVERY LINE from RESUMEN. Do not skip small values like 0,05€ or 0,91€.**
+
 3. **Red Flags - DO NOT USE:**
    - Any value preceded by "Nota: Esta sección corresponde al periodo"
    - Any value in sections titled "DESGLOSE EN EL PERIODO ACTUAL"
