@@ -14,6 +14,7 @@ class PaddleConfig:
         logger.info("Loading PaddleOCR 2.x with optimized configuration")
 
         # PaddleOCR 2.x configuration - optimized for invoice documents
+        # Special focus on complex financial tables and multi-column layouts
         return {
             'lang': 'es',
             'use_angle_cls': True,   # Detect rotated text (important for scanned docs)
@@ -22,9 +23,12 @@ class PaddleConfig:
             'enable_mkldnn': True,   # Optimized for Cloud Run (Linux)
             'cpu_threads': 8,
             # Detection parameters (optimized for dense text in tables)
-            'det_db_thresh': 0.2,        # Lower = more sensitive (was 0.3)
-            'det_db_box_thresh': 0.3,    # Lower = detect smaller boxes (was 0.5)
-            'det_limit_side_len': 1216,  # Higher resolution for better detection (multiple of 32)
+            'det_db_thresh': 0.15,       # More sensitive (was 0.2) - better for small text
+            'det_db_box_thresh': 0.25,   # Lower = detect smaller boxes (was 0.3)
+            'det_limit_side_len': 1600,  # Higher resolution for better detection (was 1216, multiple of 32)
+            'det_db_unclip_ratio': 1.6,  # Slightly expand boxes to avoid cutting text (default 1.5)
+            'use_dilation': True,        # Dilate text boxes to merge nearby characters
             'rec_batch_num': 6,          # Batch size for recognition (more context)
-            'drop_score': 0.3,           # Confidence threshold (was default 0.5)
+            'drop_score': 0.25,          # Lower confidence threshold (was 0.3) - capture more text
+            'max_text_length': 50,       # Allow longer text sequences in recognition
         }

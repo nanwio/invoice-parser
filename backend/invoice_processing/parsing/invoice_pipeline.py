@@ -17,6 +17,7 @@ from invoice_processing.models.invoice_data import Invoice
 from invoice_processing.ai_services.gemini_processor import GeminiInvoiceProcessor
 from invoice_processing.ai_services.paddle_ocr import create_paddle_processor
 from invoice_processing.validation.invoice_checker import InvoiceValidator
+from invoice_processing.parsing.invoice_corrector import InvoiceFinancialCorrector
 from invoice_processing.utilities.document_utils import document_utils
 
 
@@ -184,8 +185,14 @@ class InvoiceProcessor:
 
                 structuring_time = time.perf_counter() - structuring_start
 
-            # Step 3: Fast validation (common for both modes)
-            logger.info("Step 3/3: Validating structured data")
+            # Step 3: Apply financial corrections (smart post-processing)
+            logger.info("Step 3/4: Applying intelligent financial corrections")
+            correction_start = time.perf_counter()
+            invoice = InvoiceFinancialCorrector.apply_all_corrections(invoice)
+            correction_time = time.perf_counter() - correction_start
+
+            # Step 4: Fast validation (common for both modes)
+            logger.info("Step 4/4: Validating structured data")
             validation_start = time.perf_counter()
             validation_result = self.validator.validate_invoice(invoice)
             validation_time = time.perf_counter() - validation_start
@@ -199,7 +206,7 @@ class InvoiceProcessor:
         logger.info(
             f"Invoice processed in {total_time:.2f}s "
             f"({mode} mode: OCR={ocr_time:.2f}s, conversion={conversion_time:.2f}s, "
-            f"structure={structuring_time:.2f}s, validation={validation_time:.2f}s)"
+            f"structure={structuring_time:.2f}s, correction={correction_time:.2f}s, validation={validation_time:.2f}s)"
         )
 
         processing_results = {
@@ -212,6 +219,7 @@ class InvoiceProcessor:
                 "ocr_time": ocr_time,
                 "image_conversion_time": conversion_time,
                 "structuring_time": structuring_time,
+                "correction_time": correction_time,
                 "validation_time": validation_time
             },
             "optimization_config": "vision_mode" if self.use_vision else "ocr_mode"

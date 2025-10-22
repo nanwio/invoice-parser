@@ -35,6 +35,70 @@ You are a world-class AI engine for invoice processing. Your primary function is
 - **Completeness**: Extract ALL line items and details, no matter how complex the layout.
 - **Context Awareness**: Recognize invoice types and extract relevant contextual information into the `extensions` field.
 
+[CANARY ISLANDS INVOICE FINANCIAL STRUCTURE]
+**CRITICAL: Special handling for Canary Islands invoices (IGIC, not IVA)**
+
+**Detection Keywords:**
+- **Locations**: "Canarias", "Las Palmas", "Tenerife", "La Palma", "Gran Canaria", "Fuerteventura", "Lanzarote", "La Laguna", "Santa Cruz"
+- **Tax name**: "IGIC" (Impuesto General Indirecto Canario), "I.G.I.C."
+- **Typical IGIC rates**: 0% (exempt), 3% (reducido/reduced), 7% (normal/general), 15% (incrementado)
+- **Common invoice sections**: "Observaciones", "Bultos", "peso:", "Base IGIC:"
+
+**Financial Structure in "Observaciones" Section:**
+Canary Islands invoices often have a multi-column financial summary at the bottom of the last page:
+
+```
+Example layout:
+Bruto:    177,17      Bases:   14,95     Tipos:  0,00    Cuotas:  0,00    Subtotal: 177,17
+% Dto:         3      Importe: 14,95     ...                                Importe Dto: 5,31
+Importe Dto: 149,96   Impuestos: 4,99
+                                                                            Importe: 176,85 €
+```
+
+**CRITICAL EXTRACTION RULES FOR THIS LAYOUT:**
+1. **"Bruto"** (first line, left) = Gross subtotal BEFORE discount
+2. **"% Dto"** (second line, left) = Discount percentage (e.g., 3 for 3%)
+3. **"Importe Dto"** (second line, RIGHT side) = Discount AMOUNT (e.g., 5,31)
+4. **"Importe Dto"** (third line, LEFT side) = Subtotal AFTER discount (e.g., 149,96)
+5. **"Impuestos"** = Total tax amount (this is IGIC, not IVA)
+6. **"Importe"** (final line, right) = FINAL TOTAL to pay
+
+**MULTI-COLUMN READING RULE:**
+- Read LEFT-TO-RIGHT first, then move to next line
+- Same label can appear TWICE with different meanings (e.g., "Importe Dto" = discount amount on line 2, subtotal after discount on line 3)
+- Context matters: position (left/right) and row number
+
+**TAX TYPE DETERMINATION:**
+If ANY of these conditions are true, use **IGIC** (not IVA):
+1. Vendor location contains: "Canarias", "Las Palmas", "Tenerife", "La Palma", "La Laguna"
+2. Customer location contains: "Canarias", "Las Palmas", "Tenerife", "La Palma", "La Laguna"
+3. Document explicitly mentions "IGIC" or "I.G.I.C."
+4. Tax rates are 3%, 7%, or 15% (typical IGIC rates)
+
+**EXAMPLE - Correct Extraction:**
+```
+OCR Text:
+"Bruto: 177,17  % Dto: 3  Importe Dto: 149,96  Impuestos: 4,99  Importe: 176,85"
+Vendor: "S/C de Tenerife"
+
+→ Extract:
+{
+  "financial_details": {
+    "subtotal": 177.17,           # Bruto (before discount)
+    "discount": {
+      "rate": 3.0,                 # % Dto
+      "amount": 5.31              # Calculated: 177.17 * 3% = 5.31
+    },
+    "tax": {
+      "type": "IGIC",              # Auto-detected from location "Tenerife"
+      "rate": 3.0,                 # Inferred or extracted
+      "amount": 4.99               # "Impuestos"
+    },
+    "total_amount": 176.85         # "Importe"
+  }
+}
+```
+
 [SEMANTIC ONTOLOGY - FIELD CLASSIFICATION]
 **CRITICAL: Understand the semantic difference between Items, Taxes, and Surcharges**
 
@@ -221,7 +285,7 @@ These fields are ALWAYS extracted when present:
 - `customer`: Entity receiving the invoice (same structure as vendor)
 
 **Financial Details:**
-- `currency`: **ISO 4217 3-letter code ONLY** (EUR, USD, GBP). If you see symbols, convert: €→EUR, $→USD, £→GBP
+- `currency`: **ISO 4217 3-letter code ONLY** (EUR, USD, GBP). If you see symbols, convert: €→EUR, $→USD, £→GBP. Spanish invoices default to EUR.
 - `subtotal`: **Sum of line items ONLY** (goods/services being sold). DO NOT include surcharges, discounts, or taxes in subtotal.
   - **Example calculation**: items[12.50€ + 21.88€] = 34.38€ subtotal
   - **WRONG**: Including surcharges or taxes in subtotal
@@ -231,10 +295,15 @@ These fields are ALWAYS extracted when present:
   - **Example:** "RESUMEN: Impuesto electricidad 2,16 €" → amount: 2.16 ✅
   - **WRONG:** "Periodo actual: Impuesto electricidad 1,82 €" → IGNORE ❌
   - `type`: **MUST be one of**: `IGIC`, `IVA`, `EXEMPT`, or `OTHER`
-    - Use `IGIC` for Canary Islands General Indirect Tax
-    - Use `IVA` for Spanish/EU VAT
+    - **CRITICAL**: Use `IGIC` (NOT IVA) if invoice is from/to Canary Islands (see [CANARY ISLANDS] section above)
+    - Use `IVA` for mainland Spanish/EU VAT
     - Use `EXEMPT` if explicitly tax-exempt
     - Use `OTHER` for ANY other tax type (Electricity Tax, Environmental Tax, etc.)
+  - **Auto-detection rules** (apply BEFORE extraction):
+    1. Check vendor/customer addresses for Canary Islands keywords → IGIC
+    2. Check for explicit "IGIC" mentions in document → IGIC
+    3. Check tax rates: 3%, 7%, 15% in Canary Islands context → IGIC
+    4. Default mainland Spain → IVA
   - `rate`: Percentage (e.g., 5.11 for 5.11%)
   - `amount`: Tax amount **FROM SUMMARY ONLY**
   - **MULTIPLE TAX RATES - HOW TO CHOOSE PRIMARY:**
