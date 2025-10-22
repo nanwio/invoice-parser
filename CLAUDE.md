@@ -37,32 +37,71 @@ poetry run python generate_token.py
 
 ## Architecture Overview
 
-The system is an asynchronous, multi-stage pipeline designed for high-speed invoice processing.
+The system is an asynchronous, multi-stage pipeline designed for high-speed invoice processing with **two processing modes**:
 
-### High-Level Flow
-1.  **PDF Upload**: A request hits the single `POST /api/v1/invoice/parse` endpoint.
-2.  **Cache Check**: The system checks Redis for a result using the PDF's hash. If found, returns it instantly.
-3.  **Optimized OCR**: The PDF is processed by a highly optimized, parallelized `PaddleOCR` engine running on the CPU.
-4.  **AI Structuring**: The raw text from the OCR is sent to `Gemini 2.5 Flash` with a robust prompt to be structured into a clean JSON format.
-5.  **Validation**: The structured data is validated against a set of business rules (e.g., totals must match).
-6.  **Cache & Response**: The final result is cached in Redis and returned to the user.
+### Processing Modes
 
-### Performance Focus
-The system is now built around a **single, highly-optimized performance mode** designed for maximum speed on CPU. All parameters for OCR and image processing have been fine-tuned for a sub-2-second target, removing the complexity of multiple performance profiles.
+#### **OCR Mode (Default)** - Fast & Cost-Effective
+```bash
+POST /api/v1/invoice/parse?mode=ocr
+```
+**Flow:**
+1. **PDF Upload** → `POST /api/v1/invoice/parse?mode=ocr`
+2. **Cache Check** → Redis lookup by PDF hash (instant return if hit)
+3. **PaddleOCR Extraction** → Parallel text extraction from PDF (~0.5-1s)
+4. **Gemini Text Structuring** → Gemini 2.5 Flash processes OCR text (~1-2s)
+5. **Validation** → Business rules verification
+6. **Cache & Response** → Result cached and returned
+
+**Performance:** <2 seconds | **Best for:** Standard invoices, high-volume processing
+
+#### **Vision Mode** - Maximum Accuracy
+```bash
+POST /api/v1/invoice/parse?mode=vision
+```
+**Flow:**
+1. **PDF Upload** → `POST /api/v1/invoice/parse?mode=vision`
+2. **Cache Check** → Redis lookup by PDF hash
+3. **Image Conversion** → PDF pages to images (~0.4-0.5s per page)
+4. **Gemini Vision Multimodal** → Gemini "sees" document layout (~6-9s)
+5. **Validation** → Business rules verification
+6. **Cache & Response** → Result cached and returned
+
+**Performance:** ~7-13 seconds | **Best for:** Complex layouts, poor quality scans
+
+### When to Use Each Mode
+
+| Scenario | Recommended Mode |
+|----------|------------------|
+| Standard invoices with clear text | **OCR** (3-5x faster) |
+| High-volume batch processing | **OCR** (lower cost) |
+| Complex multi-column layouts | **Vision** (better accuracy) |
+| Scanned/low-quality documents | **Vision** (sees structure) |
+| Real-time user-facing API | **OCR** (sub-2s response) |
+
+### Performance Optimization
+
+**Pre-cached Models:** PaddleOCR models are downloaded during Docker build (not at runtime) for instant cold starts.
+
+**Redis Caching:** Identical PDFs (by hash) return cached results in <50ms, bypassing all processing.
 
 ### Key Modules (`backend/invoice_processing/`)
 
 #### `ai_services/`
-- **`paddle_ocr/`**: A self-contained package for all OCR operations.
-  - `processor.py`: The main orchestrator.
-  - `config.py`: Manages the single, ultra-fast configuration.
-  - `image_handler.py`: Handles PDF-to-image conversion and pre-processing.
-  - `ocr_executor.py`: Runs the core OCR engine in a parallelized, asynchronous manner.
-- **`gemini_processor.py`**: Manages all communication with the Gemini API for structuring data.
-  - `gemini_engines/prompts.py`: Contains the robust, centralized prompt for data extraction.
+- **`paddle_ocr/`**: Self-contained package for OCR operations (OCR mode only).
+  - `processor.py`: Main OCR orchestrator with lazy initialization
+  - `config.py`: Optimized PaddleOCR configuration (MKLDNN enabled for Linux)
+  - `image_handler.py`: PDF-to-image conversion and preprocessing
+  - `ocr_executor.py`: Parallelized, asynchronous OCR execution
+  - **Models:** Pre-cached during Docker build for instant startup
+
+- **`gemini_processor.py`**: Dual-mode Gemini API communication
+  - `structure_invoice_data_from_text()`: OCR mode - processes extracted text
+  - `structure_invoice_data_from_images()`: Vision mode - processes PDF images
+  - `gemini/prompts.py`: Centralized prompt with multi-tax handling
 
 #### `parsing/invoice_pipeline.py`
-The main orchestrator for the entire process. It coordinates calls to the cache, OCR engine, and Gemini processor.
+Main pipeline orchestrator. Routes requests to OCR or Vision mode based on `?mode=` parameter.
 
 #### Other Key Modules
 - **`caching/`**: Contains the Redis cache logic.

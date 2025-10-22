@@ -65,9 +65,10 @@ COPY backend/api ./api
 COPY backend/configuration ./configuration
 COPY backend/invoice_processing ./invoice_processing
 
-# Pre-cache PaddleOCR models (REQUIRED for fast startup)
-COPY backend/scripts/cache_models.py ./scripts/
-RUN python scripts/cache_models.py
+# Pre-cache PaddleOCR models (DISABLED - causes segfault during build)
+# Models will be downloaded on first use (~30s cold start)
+# COPY backend/scripts/cache_models.py ./scripts/
+# RUN python scripts/cache_models.py
 
 # NOW create non-root user and change ownership
 RUN groupadd --system --gid 1001 appuser && \
