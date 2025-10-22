@@ -27,16 +27,20 @@ class InvoiceFinancialCorrector:
     ]
 
     @classmethod
-    def apply_all_corrections(cls, invoice: Invoice) -> Invoice:
+    def apply_all_corrections(cls, invoice: Optional[Invoice]) -> Optional[Invoice]:
         """
         Apply all correction rules to the invoice.
 
         Args:
-            invoice: The invoice object to correct
+            invoice: The invoice object to correct (or None if extraction failed)
 
         Returns:
-            Corrected invoice object
+            Corrected invoice object, or None if input was None
         """
+        if invoice is None:
+            logger.warning("⚠️  Cannot apply corrections: invoice is None (extraction failed)")
+            return None
+
         logger.info("Applying financial corrections to invoice")
 
         # 1. Fix IGIC/IVA tax type

@@ -81,22 +81,30 @@ OCR Text:
 "Bruto: 177,17  % Dto: 3  Importe Dto: 149,96  Impuestos: 4,99  Importe: 176,85"
 Vendor: "S/C de Tenerife"
 
-→ Extract:
+→ Extract (VALID JSON, NO COMMENTS):
 {
   "financial_details": {
-    "subtotal": 177.17,           # Bruto (before discount)
+    "subtotal": 177.17,
     "discount": {
-      "rate": 3.0,                 # % Dto
-      "amount": 5.31              # Calculated: 177.17 * 3% = 5.31
+      "rate": 3.0,
+      "amount": 5.31
     },
     "tax": {
-      "type": "IGIC",              # Auto-detected from location "Tenerife"
-      "rate": 3.0,                 # Inferred or extracted
-      "amount": 4.99               # "Impuestos"
+      "type": "IGIC",
+      "rate": 3.0,
+      "amount": 4.99
     },
-    "total_amount": 176.85         # "Importe"
+    "total_amount": 176.85
   }
 }
+
+Explanation:
+- subtotal: 177.17 = "Bruto" (before discount)
+- discount.rate: 3.0 = "% Dto"
+- discount.amount: 5.31 = Calculated from 177.17 * 3%
+- tax.type: "IGIC" = Auto-detected from location "Tenerife"
+- tax.amount: 4.99 = "Impuestos"
+- total_amount: 176.85 = "Importe"
 ```
 
 [SEMANTIC ONTOLOGY - FIELD CLASSIFICATION]
