@@ -49,6 +49,48 @@ class GeminiInvoiceProcessor:
         except Exception as e:
             logger.error(f"Gemini warm-up failed. Check API key and configuration. Error: {e}")
 
+    def _clean_json_comments(self, json_text: str) -> str:
+        """
+        Remove JSON comments that Gemini might add despite being told not to.
+
+        Handles:
+        - Inline comments: "key": value  # comment
+        - Python-style comments at end of lines
+        """
+        import re
+
+        # Remove inline comments (# anything) at end of lines
+        # This regex preserves strings but removes # comments
+        lines = []
+        for line in json_text.split('\n'):
+            # Don't remove # inside strings
+            # Simple heuristic: if # appears after a comma or before a closing brace/bracket
+            if '#' in line:
+                # Find position of # that's not inside a string
+                in_string = False
+                quote_char = None
+                clean_line = []
+
+                for i, char in enumerate(line):
+                    if char in ('"', "'") and (i == 0 or line[i-1] != '\\'):
+                        if not in_string:
+                            in_string = True
+                            quote_char = char
+                        elif char == quote_char:
+                            in_string = False
+                            quote_char = None
+
+                    if char == '#' and not in_string:
+                        # Found comment, truncate here
+                        break
+                    clean_line.append(char)
+
+                lines.append(''.join(clean_line).rstrip())
+            else:
+                lines.append(line)
+
+        return '\n'.join(lines)
+
     async def structure_invoice_data_from_text(self, ocr_text: str) -> Tuple[Optional[Invoice], Dict[str, Any]]:
         """
         Structures invoice data from OCR text, returning a Pydantic Invoice object.
@@ -82,6 +124,9 @@ class GeminiInvoiceProcessor:
                 json_text = json_text.rsplit('\n```', 1)[0]
 
             json_text = json_text.strip()
+
+            # CRITICAL: Remove any JSON comments that Gemini might have added
+            json_text = self._clean_json_comments(json_text)
 
             invoice_dict = json.loads(json_text)
 

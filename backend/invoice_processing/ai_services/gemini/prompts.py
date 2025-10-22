@@ -82,21 +82,21 @@ OCR Text:
 Vendor: "S/C de Tenerife"
 
 → Extract (VALID JSON, NO COMMENTS):
-{
-  "financial_details": {
+{{
+  "financial_details": {{
     "subtotal": 177.17,
-    "discount": {
+    "discount": {{
       "rate": 3.0,
       "amount": 5.31
-    },
-    "tax": {
+    }},
+    "tax": {{
       "type": "IGIC",
       "rate": 3.0,
       "amount": 4.99
-    },
+    }},
     "total_amount": 176.85
-  }
-}
+  }}
+}}
 
 Explanation:
 - subtotal: 177.17 = "Bruto" (before discount)
@@ -447,6 +447,13 @@ Identify the invoice type and extract relevant contextual data into the `extensi
 [OUTPUT SCHEMA]
 Return ONLY valid JSON without markdown code blocks or additional text.
 The JSON must strictly conform to the following Pydantic model schema:
+
+**CRITICAL JSON FORMATTING RULES:**
+- NO comments (# or //) in the JSON output
+- NO trailing commas
+- NO markdown code blocks (```json)
+- ONLY pure, valid JSON
+- All strings must use double quotes, never single quotes
 
 {json_schema}
 
