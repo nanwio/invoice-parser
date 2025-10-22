@@ -65,11 +65,11 @@ class PaddleProcessor:
             try:
                 self.table_processor = InvoiceTableProcessor()
                 logger.info("Using table recognition mode for invoice processing")
-            except ImportError as e:
+            except (ImportError, SystemExit, Exception) as e:
                 logger.warning(f"Table recognition unavailable: {e}. Falling back to standard OCR")
                 self.use_table_recognition = False
 
-        if not use_table_recognition:
+        if not self.use_table_recognition:
             # Fallback to standard OCR
             self.ocr_engine = PaddleOCRProvider.get_engine()
             self.engine_lock = PaddleOCRProvider.get_lock()
