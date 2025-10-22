@@ -61,6 +61,7 @@ class InvoiceTableProcessor:
             'lang': 'en',               # Must be 'en' or 'ch' (layout model requirement)
             'use_gpu': False,
             'enable_mkldnn': True,      # Intel CPU optimization (for Cloud Run, disabled on macOS via config)
+            'cpu_threads': 1,           # 🔧 FIX: Single thread prevents segfault with paddleclas (PaddleOCR#14497)
         }
 
         logger.success("PPStructure table processor initialized with thread-local storage")
