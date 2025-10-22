@@ -3,8 +3,12 @@ Invoice Table Processor using PaddleOCR PPStructure (v2.7.3).
 
 This module uses PPStructure to properly extract structured data from invoice tables,
 preserving column-row relationships through table recognition and OCR.
+
+Thread-safety: Uses thread-local storage to ensure each thread gets its own PPStructure
+engine instance, preventing C++ predictor state corruption in multi-threaded environments.
 """
 import asyncio
+import threading
 from typing import List, Dict, Any
 from loguru import logger
 from PIL import Image
@@ -27,32 +31,69 @@ class InvoiceTableProcessor:
     - Layout analysis and table detection
     - Structured table recognition with OCR
     - Document orientation detection
+
+    Thread-safety implementation:
+    - Uses threading.local() to provide isolated PPStructure engine per thread
+    - Prevents C++ predictor state corruption in concurrent/sequential requests
+    - Each thread initializes engine on first use, then reuses it
+    - Zero overhead for subsequent requests within same thread
     """
 
     def __init__(self):
-        """Initialize PPStructure for table processing."""
+        """Initialize thread-local storage for PPStructure engines."""
         if not PADDLE_TABLE_AVAILABLE:
             raise ImportError("PaddleOCR PPStructure not installed")
 
-        logger.info("Initializing Invoice Table Processor with PaddleOCR PPStructure")
+        logger.info("Initializing Invoice Table Processor with thread-local PPStructure engines")
 
-        # Initialize PPStructure with optimized parameters for invoices
-        self.structure_engine = PPStructure(
-            show_log=False,
-            table=True,              # Enable table recognition (critical for invoices)
-            ocr=True,                # Enable OCR within tables
-            layout=True,             # ✅ ENABLE layout analysis for better column detection
-            image_orientation=True,  # Enable rotation detection and correction
-            lang='en',               # Must be 'en' or 'ch' (layout model requirement)
-            use_gpu=False,
-            enable_mkldnn=True,      # Intel CPU optimization (for Cloud Run, disabled on macOS via config)
-        )
+        # Thread-local storage: each thread gets its own engine instance
+        # This prevents the "could not execute a primitive" error caused by
+        # sharing a single C++ predictor across multiple threads
+        self._thread_local = threading.local()
 
-        logger.success("PPStructure table processor loaded successfully")
+        # Store configuration for lazy initialization per thread
+        self._engine_config = {
+            'show_log': False,
+            'table': True,              # Enable table recognition (critical for invoices)
+            'ocr': True,                # Enable OCR within tables
+            'layout': True,             # ✅ ENABLE layout analysis for better column detection
+            'image_orientation': True,  # Enable rotation detection and correction
+            'lang': 'en',               # Must be 'en' or 'ch' (layout model requirement)
+            'use_gpu': False,
+            'enable_mkldnn': True,      # Intel CPU optimization (for Cloud Run, disabled on macOS via config)
+        }
+
+        logger.success("PPStructure table processor initialized with thread-local storage")
+
+    def _get_engine(self) -> 'PPStructure':
+        """
+        Get thread-local PPStructure engine instance.
+
+        Lazy initialization: creates engine on first access per thread.
+        Subsequent calls within same thread return cached instance.
+
+        Returns:
+            PPStructure: Thread-isolated engine instance
+        """
+        # Check if current thread already has an engine
+        if not hasattr(self._thread_local, 'engine'):
+            # First access in this thread - create new engine
+            thread_id = threading.current_thread().ident
+            logger.debug(f"Initializing PPStructure engine for thread {thread_id}")
+
+            self._thread_local.engine = PPStructure(**self._engine_config)
+
+            logger.debug(f"Thread {thread_id}: PPStructure engine ready")
+
+        return self._thread_local.engine
 
     async def process_image_async(self, image: Image.Image, page_num: int) -> Dict[str, Any]:
         """
         Process a single invoice page image with PPStructure table recognition.
+
+        Thread-safety: Uses thread-local engine instance retrieved via _get_engine().
+        Each asyncio thread pool worker gets its own isolated PPStructure engine,
+        preventing C++ predictor state corruption.
 
         Args:
             image: PIL Image of the invoice page
@@ -70,8 +111,10 @@ class InvoiceTableProcessor:
         # Convert PIL Image to numpy array (PPStructure expects numpy)
         img_array = np.array(image)
 
-        # Process image with PPStructure (async to avoid blocking)
-        result = await asyncio.to_thread(self.structure_engine, img_array)
+        # Get thread-local engine and process image (async to avoid blocking)
+        # Each thread in the asyncio thread pool will get its own engine instance
+        engine = self._get_engine()
+        result = await asyncio.to_thread(engine, img_array)
 
         # PPStructure returns list of regions: [{'type': 'Table'|'Figure'|..., 'bbox': [...], 'res': ...}]
         logger.debug(f"Page {page_num}: Found {len(result)} regions")
