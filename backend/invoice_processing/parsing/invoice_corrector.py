@@ -46,7 +46,10 @@ class InvoiceFinancialCorrector:
         # 1. Validate unit prices (detect column misalignment)
         cls.validate_unit_prices(invoice)
 
-        # 2. Fix IGIC/IVA tax type
+        # 2. Validate taxes (detect duplication from multiple sources)
+        cls.validate_tax_duplication(invoice)
+
+        # 3. Fix IGIC/IVA tax type
         invoice = cls.fix_canary_islands_tax_type(invoice)
 
         # 3. Detect and add missing discounts
@@ -118,6 +121,61 @@ class InvoiceFinancialCorrector:
             logger.debug(
                 f"✓ Unit prices look valid: only {suspicious_count}/{total_items} "
                 f"match tax rates (< 50% threshold)"
+            )
+
+    @classmethod
+    def validate_tax_duplication(cls, invoice: Invoice) -> None:
+        """
+        Detect if taxes were incorrectly duplicated from multiple sources.
+
+        Common issue: Gemini extracts taxes from BOTH:
+        - Tax summary section (Bases/Tipos/Cuotas)
+        - Total tax line ("Impuestos: X€")
+        Result: Taxes are doubled → validation fails
+
+        Warning signs:
+        - Sum of taxes > subtotal * 0.25 (unreasonably high for Spanish invoices)
+        - Total calculated significantly > actual total (>5€ difference)
+        """
+        # Calculate total taxes
+        total_taxes = invoice.financial_details.tax.amount
+        if invoice.financial_details.additional_taxes:
+            total_taxes += sum(t.amount for t in invoice.financial_details.additional_taxes)
+
+        subtotal = invoice.financial_details.subtotal
+        discount = invoice.financial_details.discount.amount if invoice.financial_details.discount else 0
+        base_imponible = subtotal - discount
+
+        # Spanish invoices: tax typically 0-21% of base imponible
+        # If > 25%, likely duplication
+        tax_ratio = total_taxes / base_imponible if base_imponible > 0 else 0
+
+        if tax_ratio > 0.25:
+            logger.error(
+                f"🚨 CRITICAL: Tax duplication detected! "
+                f"Total taxes ({total_taxes:.2f}€) = {tax_ratio*100:.0f}% of base imponible ({base_imponible:.2f}€). "
+                f"Spanish invoices typically have 0-21% tax rate. "
+                f"Likely cause: Gemini extracted taxes from MULTIPLE sources "
+                f"(e.g., 'Bases/Cuotas' section + 'Impuestos:' line). "
+                f"⚠️  This violates the '3-LEVEL STRATEGY' - should use ONLY ONE level."
+            )
+
+            # Log tax breakdown for debugging
+            logger.error(f"📋 Tax breakdown:")
+            logger.error(f"  - Main tax: {invoice.financial_details.tax.rate}% = {invoice.financial_details.tax.amount:.2f}€")
+            if invoice.financial_details.additional_taxes:
+                for i, tax in enumerate(invoice.financial_details.additional_taxes):
+                    logger.error(f"  - Additional tax {i+1}: {tax.rate}% = {tax.amount:.2f}€")
+            logger.error(f"  → TOTAL: {total_taxes:.2f}€ (expected max ~{base_imponible * 0.21:.2f}€)")
+
+        elif tax_ratio > 0.21:
+            logger.warning(
+                f"⚠️  High tax ratio: {tax_ratio*100:.1f}% (taxes={total_taxes:.2f}€, base={base_imponible:.2f}€). "
+                f"Spanish standard IVA max is 21%. Check if taxes were extracted correctly."
+            )
+        else:
+            logger.debug(
+                f"✓ Tax ratio OK: {tax_ratio*100:.1f}% ({total_taxes:.2f}€ / {base_imponible:.2f}€)"
             )
 
     @classmethod
