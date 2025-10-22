@@ -41,11 +41,11 @@ class InvoiceTableProcessor:
             show_log=False,
             table=True,              # Enable table recognition (critical for invoices)
             ocr=True,                # Enable OCR within tables
-            layout=False,            # Disable full layout analysis (focus on tables only)
+            layout=True,             # ✅ ENABLE layout analysis for better column detection
             image_orientation=True,  # Enable rotation detection and correction
-            lang='en',               # Must be 'en' or 'ch' (layout model requirement, even when layout=False)
+            lang='en',               # Must be 'en' or 'ch' (layout model requirement)
             use_gpu=False,
-            enable_mkldnn=True,      # Intel CPU optimization (for Cloud Run)
+            enable_mkldnn=True,      # Intel CPU optimization (for Cloud Run, disabled on macOS via config)
         )
 
         logger.success("PPStructure table processor loaded successfully")

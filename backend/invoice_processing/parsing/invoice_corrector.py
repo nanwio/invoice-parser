@@ -43,16 +43,82 @@ class InvoiceFinancialCorrector:
 
         logger.info("Applying financial corrections to invoice")
 
-        # 1. Fix IGIC/IVA tax type
+        # 1. Validate unit prices (detect column misalignment)
+        cls.validate_unit_prices(invoice)
+
+        # 2. Fix IGIC/IVA tax type
         invoice = cls.fix_canary_islands_tax_type(invoice)
 
-        # 2. Detect and add missing discounts
+        # 3. Detect and add missing discounts
         invoice = cls.detect_missing_discount(invoice)
 
-        # 3. Recalculate subtotal if inconsistent
+        # 4. Recalculate subtotal if inconsistent
         invoice = cls.verify_and_fix_subtotal(invoice)
 
         return invoice
+
+    @classmethod
+    def validate_unit_prices(cls, invoice: Invoice) -> None:
+        """
+        Validate that unit prices are correct and not confused with tax rates or discounts.
+
+        This is a DETECTION-only method (doesn't fix, just warns).
+        Common issue: OCR loses column structure → Gemini confuses IGIC/IVA column (3%, 7%, 15%)
+        with unit_price column.
+
+        Indicators of column misalignment:
+        - >80% of items have unit_price in {0.0, 3.0, 7.0, 15.0, 21.0}
+        - These are typical Spanish tax rates (IGIC/IVA)
+        - If detected, log CRITICAL warning for manual review
+        """
+        if not invoice.items or len(invoice.items) == 0:
+            logger.debug("No items to validate")
+            return
+
+        # Common Spanish tax rates (IGIC + IVA)
+        COMMON_TAX_RATES = {0.0, 3.0, 7.0, 15.0, 21.0}
+
+        # Count how many items have prices that match tax rates
+        suspicious_count = 0
+        total_items = len(invoice.items)
+
+        for item in invoice.items:
+            if item.unit_price in COMMON_TAX_RATES:
+                suspicious_count += 1
+
+        # If >80% of items have "tax rate" prices, likely column misalignment
+        suspicious_ratio = suspicious_count / total_items if total_items > 0 else 0
+
+        if suspicious_ratio > 0.8:
+            logger.error(
+                f"🚨 CRITICAL: Unit price column misalignment detected! "
+                f"{suspicious_count}/{total_items} items ({suspicious_ratio*100:.0f}%) have unit_price "
+                f"matching common tax rates {COMMON_TAX_RATES}. "
+                f"This usually means Gemini confused the IGIC/IVA column with the Price column. "
+                f"⚠️  INVOICE REQUIRES MANUAL REVIEW OR RE-EXTRACTION"
+            )
+
+            # Log first 5 suspicious items for debugging
+            logger.error("📋 Suspicious items (showing first 5):")
+            for i, item in enumerate(invoice.items[:5]):
+                if item.unit_price in COMMON_TAX_RATES:
+                    logger.error(
+                        f"  - Item {i+1}: '{item.description[:40]}...' → "
+                        f"unit_price={item.unit_price} (suspicious!), "
+                        f"quantity={item.quantity}, line_total={item.line_total}"
+                    )
+
+        elif suspicious_ratio > 0.5:
+            logger.warning(
+                f"⚠️  Possible unit price issues: {suspicious_count}/{total_items} items "
+                f"({suspicious_ratio*100:.0f}%) have unit_price matching tax rates. "
+                f"Review extraction quality."
+            )
+        else:
+            logger.debug(
+                f"✓ Unit prices look valid: only {suspicious_count}/{total_items} "
+                f"match tax rates (< 50% threshold)"
+            )
 
     @classmethod
     def fix_canary_islands_tax_type(cls, invoice: Invoice) -> Invoice:

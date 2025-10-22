@@ -1,5 +1,6 @@
 from loguru import logger
 from typing import Dict, Any
+import platform
 
 class PaddleConfig:
     """
@@ -10,8 +11,13 @@ class PaddleConfig:
     def get_config() -> Dict[str, Any]:
         """
         Returns optimized configuration for PaddleOCR 2.x (stable version).
+        Platform-aware: MKLDNN only enabled on Linux (Cloud Run), disabled on macOS/Windows.
         """
-        logger.info("Loading PaddleOCR 2.x with optimized configuration")
+        # CRITICAL: MKLDNN only works on Linux. Crashes on macOS with:
+        # 'AnalysisConfig' object has no attribute 'set_mkldnn_cache_capacity'
+        is_linux = platform.system() == 'Linux'
+
+        logger.info(f"Loading PaddleOCR 2.x with optimized configuration (Platform: {platform.system()}, MKLDNN: {is_linux})")
 
         # PaddleOCR 2.x configuration - optimized for invoice documents
         # Special focus on complex financial tables and multi-column layouts
@@ -20,7 +26,7 @@ class PaddleConfig:
             'use_angle_cls': True,   # Detect rotated text (important for scanned docs)
             'use_gpu': False,
             'show_log': False,
-            'enable_mkldnn': True,   # Optimized for Cloud Run (Linux)
+            'enable_mkldnn': is_linux,   # ✅ ONLY on Linux (Cloud Run), NOT on macOS
             'cpu_threads': 8,
             # Detection parameters (optimized for dense text in tables)
             'det_db_thresh': 0.15,       # More sensitive (was 0.2) - better for small text

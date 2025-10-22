@@ -107,6 +107,64 @@ Explanation:
 - total_amount: 176.85 = "Importe"
 ```
 
+[TABLE COLUMN MAPPING - CRITICAL FOR UNIT PRICES]
+**🚨 CRITICAL: Spanish invoice tables have STANDARDIZED COLUMNS - DO NOT CONFUSE THEM**
+
+**Standard Spanish Invoice Table Structure (left to right):**
+1. **Código/Referencia** → Reference code (ignore for extraction)
+2. **Descripción/Concepto** → Item description
+3. **Cantidad/Unidades** → quantity
+4. **Precio Unitario/PVP/PVPr** → **unit_price** ⚠️ THIS IS THE PRICE
+5. **% Dto/Dto** → Discount percentage (NOT unit price!)
+6. **IGIC/IVA/%** → Tax rate percentage ⚠️ NOT UNIT PRICE (3%, 7%, 15%)
+7. **Importe/Subtotal** → line_total
+
+**⚠️ COMMON ERROR TO AVOID:**
+If you see many items with `unit_price = 3.0` or `unit_price = 7.0`, **YOU ARE READING THE WRONG COLUMN**
+- These values (3.0, 7.0) are IGIC/IVA tax rates (columns 6)
+- The ACTUAL unit prices are in column 4 (usually labeled "PVP", "Precio", "PVPr")
+
+**Column Identification Rules:**
+1. **unit_price column indicators:**
+   - Headers: "Precio", "PVP", "PVPr", "P.Unit", "Precio Unitario"
+   - Values: Wide range (0.50€ to 50.00€+), different for each item
+   - Location: BEFORE the discount column
+
+2. **Tax rate column indicators (NOT prices!):**
+   - Headers: "IGIC", "IVA", "%", "% Impuesto"
+   - Values: Limited set (0%, 3%, 7%, 15%, 21%)
+   - Location: AFTER discount, BEFORE line total
+
+3. **Discount column indicators (NOT prices!):**
+   - Headers: "% Dto", "Dto", "Descuento"
+   - Values: Percentage (0%, 3%, 5%, 10%)
+   - Location: BETWEEN price and tax
+
+**Example - CORRECT extraction:**
+```
+Raw OCR: "Product A | 2 | PVPr 7.16 | 3% | IGIC 7% | 14.32"
+✅ CORRECT:
+  - description: "Product A"
+  - quantity: 2
+  - unit_price: 7.16  ← from "PVPr 7.16"
+  - tax_rate: 7.0     ← from "IGIC 7%"
+  - line_total: 14.32
+```
+
+**Example - INCORRECT extraction (COMMON MISTAKE):**
+```
+Raw OCR: "Product A | 2 | PVPr 7.16 | 3% | IGIC 7% | 14.32"
+❌ WRONG:
+  - unit_price: 7.0   ← WRONG! This is the IGIC rate, not the price
+  - unit_price: 3.0   ← WRONG! This is the discount, not the price
+```
+
+**Validation Check:**
+After extracting all items, check:
+- If >80% of items have unit_price in {{3.0, 7.0, 15.0, 21.0}} → **ERROR: You extracted tax rates instead of prices**
+- If unit_prices look unreasonably uniform → **ERROR: Check if you're reading discount column**
+- If line_total ≠ quantity × unit_price → **ERROR: Wrong column mapping**
+
 [SEMANTIC ONTOLOGY - FIELD CLASSIFICATION]
 **CRITICAL: Understand the semantic difference between Items, Taxes, and Surcharges**
 
