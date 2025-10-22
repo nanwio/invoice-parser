@@ -275,7 +275,14 @@ class InvoiceFinancialCorrector:
     @classmethod
     def validate_financial_math(cls, invoice: Invoice) -> dict:
         """
-        Validate the financial calculations.
+        Validate the financial calculations according to Spanish invoice standards.
+
+        Spanish invoice calculation order:
+        1. Subtotal (sum of line items)
+        2. Apply discount → Base imponible (taxable base)
+        3. Calculate taxes on base imponible
+        4. Add surcharges, subtract withholding
+        5. Total = (Subtotal - Discount) + Taxes + Surcharges - Withholding
 
         Returns:
             dict with validation results and errors
@@ -283,7 +290,7 @@ class InvoiceFinancialCorrector:
         errors = []
         warnings = []
 
-        # Calculate expected total
+        # Extract financial components
         subtotal = invoice.financial_details.subtotal
         discount = invoice.financial_details.discount.amount if invoice.financial_details.discount else 0
         tax_amount = invoice.financial_details.tax.amount
@@ -295,15 +302,38 @@ class InvoiceFinancialCorrector:
         )
         withholding = invoice.financial_details.withholding.amount if invoice.financial_details.withholding else 0
 
-        expected_total = subtotal - discount + tax_amount + additional_taxes + surcharges - withholding
-        actual_total = invoice.financial_details.total_amount
+        # CRITICAL FIX: Correct order of operations for Spanish invoices
+        # First: Apply discounts and withholding to subtotal → Base imponible
+        base_imponible = subtotal - discount
 
+        # Second: Add taxes and surcharges to base
+        total_taxes = tax_amount + additional_taxes
+        expected_total = base_imponible + total_taxes + surcharges - withholding
+
+        actual_total = invoice.financial_details.total_amount
         difference = abs(expected_total - actual_total)
 
         if difference > 0.10:
-            errors.append(
+            # Detailed error message with breakdown
+            error_msg = (
                 f"Math error: expected {expected_total:.2f}€ ≠ actual {actual_total:.2f}€ "
                 f"(difference: {difference:.2f}€)"
+            )
+            errors.append(error_msg)
+
+            # Log detailed breakdown for debugging
+            logger.error(
+                f"💰 Financial validation failed:\n"
+                f"  Subtotal (bruto):        {subtotal:>8.2f}€\n"
+                f"  - Discount:              {discount:>8.2f}€\n"
+                f"  = Base imponible:        {base_imponible:>8.2f}€\n"
+                f"  + Tax (main):            {tax_amount:>8.2f}€\n"
+                f"  + Additional taxes:      {additional_taxes:>8.2f}€\n"
+                f"  + Surcharges:            {surcharges:>8.2f}€\n"
+                f"  - Withholding:           {withholding:>8.2f}€\n"
+                f"  = Expected total:        {expected_total:>8.2f}€\n"
+                f"  vs Actual total:         {actual_total:>8.2f}€\n"
+                f"  → Difference:            {difference:>8.2f}€ ❌"
             )
 
         # Check items sum

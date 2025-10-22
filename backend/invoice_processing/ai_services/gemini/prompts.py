@@ -165,6 +165,93 @@ After extracting all items, check:
 - If unit_prices look unreasonably uniform → **ERROR: Check if you're reading discount column**
 - If line_total ≠ quantity × unit_price → **ERROR: Wrong column mapping**
 
+[TAX AGGREGATION - CRITICAL FOR MULTI-RATE INVOICES]
+**🚨 CRITICAL: How to extract taxes when invoice has MULTIPLE TAX RATES**
+
+Many Spanish invoices have items with DIFFERENT IGIC/IVA rates (0%, 3%, 7%, 15%, 21%).
+The invoice provides a **TAX SUMMARY** section that groups items by tax rate.
+
+**MANDATORY: Always look for the TAX SUMMARY section:**
+
+**Common section names:**
+- "Observaciones" (Observations)
+- "Bases / Tipos / Cuotas" (Bases / Rates / Amounts)
+- "Resumen fiscal" (Tax summary)
+- Bottom of invoice, usually near total
+
+**Example Tax Summary:**
+```
+Bases    Tipos    Cuotas
+14,95    0,00     0,00      ← Items with 0% IGIC (exempt)
+149,96   3,00     4,50      ← Items with 3% IGIC
+23,45    7,00     1,64      ← Items with 7% IGIC
+```
+
+**Extraction Rules:**
+
+1. **USE THE TAX SUMMARY VALUES** (not item-by-item calculation):
+   - The "Cuotas" column shows the ACTUAL tax amounts already calculated
+   - These amounts account for rounding and any special rules
+   - Example above: Extract 0.00, 4.50, 1.64 as the tax amounts
+
+2. **For financial_details.tax (main tax):**
+   - Use the LARGEST tax amount from the summary
+   - Example: {{type: "IGIC", rate: 3.0, amount: 4.50}}
+
+3. **For financial_details.additional_taxes:**
+   - Use OTHER non-zero tax amounts from summary
+   - Example: [{{type: "IGIC", rate: 7.0, amount: 1.64}}]
+
+4. **IGNORE zero-rated bases:**
+   - If "Cuotas" is 0.00, don't include in taxes
+   - Zero-rated items are already in subtotal, no tax to add
+
+**Example - CORRECT extraction:**
+```
+Tax Summary in invoice:
+  Bases    Tipos    Cuotas
+  14,95    0,00     0,00
+  149,96   3,00     4,50
+
+✅ CORRECT JSON:
+{{
+  "tax": {{
+    "type": "IGIC",
+    "rate": 3.0,
+    "amount": 4.50    ← From "Cuotas" column
+  }},
+  "additional_taxes": []  ← No other non-zero taxes
+}}
+```
+
+**Example - INCORRECT extraction (DON'T DO THIS):**
+```
+❌ WRONG - Calculating taxes from individual items:
+{{
+  "tax": {{
+    "type": "IGIC",
+    "rate": 7.0,
+    "amount": 4.99    ← Calculated by summing items (WRONG!)
+  }},
+  "additional_taxes": [{{
+    "type": "IGIC",
+    "rate": 3.0,
+    "amount": 0.49    ← Spurious additional tax (WRONG!)
+  }}]
+}}
+```
+
+**Why use Tax Summary instead of item-by-item calculation?**
+- Tax Summary accounts for rounding at invoice level (not item level)
+- Prevents accumulation of rounding errors
+- Matches exactly what the vendor calculated
+- Required by Spanish tax law (BOE Real Decreto 1619/2012)
+
+**Validation:**
+After extraction, verify:
+- Sum of all tax amounts (main + additional) = "Impuestos" or "Total impuestos"
+- Total = (Subtotal - Discount) + Taxes = matches invoice "Total" or "Importe"
+
 [SEMANTIC ONTOLOGY - FIELD CLASSIFICATION]
 **CRITICAL: Understand the semantic difference between Items, Taxes, and Surcharges**
 
