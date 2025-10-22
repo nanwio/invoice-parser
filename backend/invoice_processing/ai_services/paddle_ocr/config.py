@@ -13,11 +13,12 @@ class PaddleConfig:
         Returns optimized configuration for PaddleOCR 2.x (stable version).
         Platform-aware: MKLDNN only enabled on Linux (Cloud Run), disabled on macOS/Windows.
         """
-        # CRITICAL: MKLDNN only works on Linux. Crashes on macOS with:
-        # 'AnalysisConfig' object has no attribute 'set_mkldnn_cache_capacity'
-        is_linux = platform.system() == 'Linux'
+        # CRITICAL: MKLDNN disabled due to "could not execute a primitive" error in Cloud Run
+        # Investigation needed: Some Cloud Run environments have MKLDNN compatibility issues
+        # TODO: Re-enable once root cause identified
+        enable_mkldnn = False  # Temporarily disabled for stability
 
-        logger.info(f"Loading PaddleOCR 2.x with optimized configuration (Platform: {platform.system()}, MKLDNN: {is_linux})")
+        logger.info(f"Loading PaddleOCR 2.x with optimized configuration (Platform: {platform.system()}, MKLDNN: {enable_mkldnn})")
 
         # PaddleOCR 2.x configuration - optimized for invoice documents
         # Special focus on complex financial tables and multi-column layouts
@@ -26,7 +27,7 @@ class PaddleConfig:
             'use_angle_cls': True,   # Detect rotated text (important for scanned docs)
             'use_gpu': False,
             'show_log': False,
-            'enable_mkldnn': is_linux,   # ✅ ONLY on Linux (Cloud Run), NOT on macOS
+            'enable_mkldnn': enable_mkldnn,   # Disabled - causing "primitive" errors in Cloud Run
             'cpu_threads': 8,
             # Detection parameters (optimized for dense text in tables)
             'det_db_thresh': 0.15,       # More sensitive (was 0.2) - better for small text
