@@ -49,8 +49,9 @@ RUN pip install --no-cache-dir --only-binary=:all: \
 
 # CRITICAL: Install paddlepaddle-gpu instead of paddlepaddle
 # Remove any existing paddlepaddle first to avoid conflicts
+# Use --ignore-installed to avoid conflicts with system packages (e.g., blinker)
 RUN pip uninstall -y paddlepaddle paddlepaddle-tiny || true && \
-    pip install --no-cache-dir \
+    pip install --no-cache-dir --ignore-installed \
     paddlepaddle-gpu==2.6.1 \
     paddleocr==2.7.3 \
     paddleclas==2.5.2 \
