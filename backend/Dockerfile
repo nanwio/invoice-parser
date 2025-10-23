@@ -93,4 +93,5 @@ USER appuser
 EXPOSE 8000
 
 # Start with gunicorn - shell form to expand $PORT from Cloud Run
-CMD gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 120 --chdir /app app:app
+# Timeout increased to 300s to allow PPStructure model download on first startup
+CMD gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 300 --chdir /app app:app
