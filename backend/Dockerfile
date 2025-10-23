@@ -85,10 +85,9 @@ COPY backend/api ./api
 COPY backend/configuration ./configuration
 COPY backend/invoice_processing ./invoice_processing
 
-# Pre-cache PaddleOCR models during build (no GPU available at build time, uses CPU)
-# This downloads ~30MB of models so they're ready at runtime
-COPY backend/scripts/cache_models.py ./scripts/
-RUN python scripts/cache_models.py
+# NOTE: Model caching removed - models download on first request at runtime
+# Similar to maite-transcripto-gpu pattern: lazy initialization when GPU is available
+# Models will be downloaded to /root/.paddleocr on first inference (~40MB total)
 
 # ==================== STAGE 2: Final runtime image ====================
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
@@ -122,14 +121,14 @@ COPY --from=builder /usr/local/lib/python3.12/dist-packages /usr/local/lib/pytho
 # Copy application code from builder
 COPY --from=builder /app /app
 
-# Copy pre-cached PaddleOCR models from builder
-# IMPORTANT: Models are cached in /root/.paddleocr during build
-COPY --from=builder /root/.paddleocr /root/.paddleocr
+# Create directories for runtime model downloads (will be populated on first request)
+RUN mkdir -p /root/.paddleocr /root/.paddleclas
 
 # Create non-root user and set permissions
 RUN groupadd --system --gid 1001 appuser && \
     useradd --system --create-home --uid 1001 --gid 1001 appuser && \
-    chown -R appuser:appuser /app /root/.paddleocr
+    chown -R appuser:appuser /app && \
+    chown -R appuser:appuser /root/.paddleocr /root/.paddleclas
 
 # Switch to non-root user for runtime
 USER appuser
