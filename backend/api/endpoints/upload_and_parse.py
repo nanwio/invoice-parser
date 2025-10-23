@@ -36,39 +36,24 @@ SUPPORTED_MIMETYPES = [
     response_model=Dict[str, Any],
     summary="Upload, parse, and validate an invoice document (PDF or Image)",
     description="""
-    Parse an invoice document using either OCR or Vision mode:
+    Parse an invoice document using PaddleOCR + Gemini Text pipeline:
 
-    - **OCR mode** (default): Fast processing using PaddleOCR + Gemini Text (~2s)
-      - Best for: Standard invoices, high-volume processing, cost-effectiveness
-      - Method: Extract text with PaddleOCR → Structure with Gemini Text API
-
-    - **Vision mode**: Accurate processing using Gemini Vision Multimodal (~7s)
-      - Best for: Complex layouts, multi-page invoices, maximum accuracy
-      - Method: Convert to images → Process with Gemini Vision API
-
-    Query Parameters:
-    - `mode`: "ocr" (default) or "vision"
+    - **Processing method**: PaddleOCR/PPStructure (GPU-accelerated) + Gemini Text API
+    - **Speed**: Fast processing (~2s typical)
+    - **Accuracy**: High quality with table recognition and layout analysis
+    - **Cost-effective**: No Vision API costs
 
     Example:
-    - Fast: `POST /api/v1/invoice/parse?mode=ocr`
-    - Accurate: `POST /api/v1/invoice/parse?mode=vision`
+    - `POST /api/v1/invoice/parse`
     """,
     tags=["Invoices"]
 )
 async def upload_and_parse_invoice(
     file: UploadFile = File(..., description="Invoice document (PDF or image file)"),
-    mode: str = "ocr",  # Default to OCR mode for speed
     user: str = Depends(get_current_user)
 ):
     job_id = str(uuid4())
-    logger.info(f"[Job {job_id}] Received file '{file.filename}' from user '{user['username']}' with mode='{mode}'")
-
-    # Validate mode parameter
-    if mode not in ["ocr", "vision"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid mode '{mode}'. Supported modes are: 'ocr' (fast, cost-effective) or 'vision' (slower, more accurate)"
-        )
+    logger.info(f"[Job {job_id}] Received file '{file.filename}' from user '{user['username']}'")
 
     if file.content_type not in SUPPORTED_MIMETYPES:
         raise HTTPException(
@@ -105,11 +90,8 @@ async def upload_and_parse_invoice(
         file_hash = None
         logger.info(f"[Job {job_id}] Image file detected. Starting full processing pipeline.")
 
-    # Initialize processor based on mode parameter
-    use_vision = (mode == "vision")
-    use_ocr_fallback = (mode == "ocr")  # Initialize PaddleOCR only in OCR mode
-
-    processor = InvoiceProcessor(use_vision=use_vision, use_ocr_fallback=use_ocr_fallback)
+    # Initialize processor (single mode: OCR + Gemini Text)
+    processor = InvoiceProcessor()
     invoice_data, processing_results = await processor.process_invoice(file_bytes, file.content_type)
 
     # Check if invoice processing failed (validation error, parsing error, etc.)

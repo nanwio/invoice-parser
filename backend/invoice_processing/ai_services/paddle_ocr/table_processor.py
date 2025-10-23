@@ -4,23 +4,17 @@ Invoice Table Processor using PaddleOCR PPStructure (v2.7.3).
 This module uses PPStructure to properly extract structured data from invoice tables,
 preserving column-row relationships through table recognition and OCR.
 
-Thread-safety: Uses thread-local storage to ensure each thread gets its own PPStructure
-engine instance, preventing C++ predictor state corruption in multi-threaded environments.
+Thread-safety: Uses singleton pattern with GPU lock (based on maite-transcripto-gpu).
 """
 import asyncio
-import threading
+from threading import Lock
 from typing import List, Dict, Any
 from loguru import logger
 from PIL import Image
 import numpy as np
 import html
 
-try:
-    from paddleocr import PPStructure
-    PADDLE_TABLE_AVAILABLE = True
-except ImportError:
-    logger.warning("PaddleOCR PPStructure not available. Install paddleocr>=2.7")
-    PADDLE_TABLE_AVAILABLE = False
+from invoice_processing.ai_services.paddle_ocr.provider import PaddleOCRProvider
 
 
 class InvoiceTableProcessor:
@@ -32,62 +26,29 @@ class InvoiceTableProcessor:
     - Structured table recognition with OCR
     - Document orientation detection
 
-    Thread-safety implementation:
-    - Uses threading.local() to provide isolated PPStructure engine per thread
-    - Prevents C++ predictor state corruption in concurrent/sequential requests
-    - Each thread initializes engine on first use, then reuses it
-    - Zero overhead for subsequent requests within same thread
+    Thread-safety implementation (based on maite-transcripto-gpu):
+    - Singleton PPStructure engine from PaddleOCRProvider
+    - Global GPU lock serializes all GPU access
+    - Simple and maintainable architecture
     """
 
-    def __init__(self):
-        """Initialize thread-local storage for PPStructure engines."""
-        if not PADDLE_TABLE_AVAILABLE:
-            raise ImportError("PaddleOCR PPStructure not installed")
-
-        logger.info("Initializing Invoice Table Processor with thread-local PPStructure engines")
-
-        # Thread-local storage: each thread gets its own engine instance
-        # This prevents the "could not execute a primitive" error caused by
-        # sharing a single C++ predictor across multiple threads
-        self._thread_local = threading.local()
-
-        # Store configuration for lazy initialization per thread
-        self._engine_config = {
-            'show_log': False,
-            'table': True,              # Enable table recognition (critical for invoices)
-            'ocr': True,                # Enable OCR within tables
-            'layout': True,             # ✅ ENABLED - layout=False disables OCR automatically (PPStructure bug)
-                                        # Fix malloc corruption with ENV MALLOC_ARENA_MAX=2 in Dockerfile
-            'image_orientation': True,  # Enable rotation detection and correction
-            'lang': 'en',               # Must be 'en' or 'ch' (layout model requirement)
-            'use_gpu': False,
-            'enable_mkldnn': True,      # Intel CPU optimization (for Cloud Run, disabled on macOS via config)
-            'cpu_threads': 1,           # Single thread for stability
-        }
-
-        logger.success("PPStructure table processor initialized with thread-local storage")
-
-    def _get_engine(self) -> 'PPStructure':
+    def __init__(self, engine=None, gpu_lock=None):
         """
-        Get thread-local PPStructure engine instance.
+        Initialize table processor with optional engine and lock injection.
 
-        Lazy initialization: creates engine on first access per thread.
-        Subsequent calls within same thread return cached instance.
-
-        Returns:
-            PPStructure: Thread-isolated engine instance
+        Args:
+            engine: PPStructure engine instance (default: from PaddleOCRProvider)
+            gpu_lock: Threading lock for GPU access (default: from PaddleOCRProvider)
         """
-        # Check if current thread already has an engine
-        if not hasattr(self._thread_local, 'engine'):
-            # First access in this thread - create new engine
-            thread_id = threading.current_thread().ident
-            logger.debug(f"Initializing PPStructure engine for thread {thread_id}")
+        # Use injected dependencies or get from singleton provider
+        self.engine = engine if engine is not None else PaddleOCRProvider.get_engine()
+        self.gpu_lock = gpu_lock if gpu_lock is not None else PaddleOCRProvider.get_lock()
+        self._is_gpu_available = PaddleOCRProvider.is_gpu_available()
 
-            self._thread_local.engine = PPStructure(**self._engine_config)
-
-            logger.debug(f"Thread {thread_id}: PPStructure engine ready")
-
-        return self._thread_local.engine
+        logger.info(
+            f"Invoice Table Processor initialized "
+            f"({'GPU mode with lock' if self._is_gpu_available else 'CPU mode'})"
+        )
 
     async def process_image_async(self, image: Image.Image, page_num: int) -> Dict[str, Any]:
         """
@@ -113,10 +74,13 @@ class InvoiceTableProcessor:
         # Convert PIL Image to numpy array (PPStructure expects numpy)
         img_array = np.array(image)
 
-        # Get thread-local engine and process image (async to avoid blocking)
-        # Each thread in the asyncio thread pool will get its own engine instance
-        engine = self._get_engine()
-        result = await asyncio.to_thread(engine, img_array)
+        # Process image with GPU lock (similar to maite-transcripto-gpu pattern)
+        # GPU lock serializes GPU memory access to prevent race conditions
+        def process_with_lock():
+            with self.gpu_lock:
+                return self.engine(img_array)
+
+        result = await asyncio.to_thread(process_with_lock)
 
         # PPStructure returns list of regions: [{'type': 'Table'|'Figure'|..., 'bbox': [...], 'res': ...}]
         logger.debug(f"Page {page_num}: Found {len(result)} regions")

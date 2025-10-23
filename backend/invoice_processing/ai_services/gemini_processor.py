@@ -1,12 +1,11 @@
 """
-Gemini AI processor with multimodal vision support
+Gemini AI processor for invoice structuring (Text-only mode).
 """
 
-from typing import Tuple, Dict, Any, Optional, List
+from typing import Tuple, Dict, Any, Optional
 from loguru import logger
 import google.generativeai as genai
 import json
-from PIL import Image
 
 from invoice_processing.models.invoice_data import Invoice
 from invoice_processing.ai_services.gemini.prompts import get_structuring_prompt
@@ -14,22 +13,14 @@ from configuration.app_settings import app_settings
 
 class GeminiInvoiceProcessor:
     """
-    Processes invoices using Google Gemini Flash-Lite in multimodal vision mode.
+    Processes invoices using Google Gemini Flash-Lite in text mode.
 
-    This processor can work in two modes:
-    1. Vision mode (preferred): Processes PDF pages as images for better accuracy
-    2. Text mode (fallback): Processes OCR text when vision is not available
+    Workflow: PaddleOCR extracts text → Gemini structures into JSON
     """
 
-    def __init__(self, vision_mode: bool = True):
-        """
-        Initialize the Gemini processor in JSON mode with semantic guidance.
-
-        Args:
-            vision_mode: If True, use multimodal vision. If False, use text-only mode.
-        """
+    def __init__(self):
+        """Initialize the Gemini processor in JSON mode with semantic guidance."""
         genai.configure(api_key=app_settings.ai_model.GEMINI_API_KEY)
-        self.vision_mode = vision_mode
 
         self._client = genai.GenerativeModel(
             model_name=app_settings.ai_model.GEMINI_MODEL_NAME,
@@ -38,16 +29,8 @@ class GeminiInvoiceProcessor:
                 "temperature": 0.1,
             }
         )
-        logger.info(f"Gemini processor initialized in {'VISION' if vision_mode else 'TEXT'} mode with semantic ontology")
+        logger.info("Gemini processor initialized in TEXT mode with semantic ontology")
 
-    async def _warm_up_connection(self):
-        """A simple check to ensure the API key is valid during startup."""
-        try:
-            # A lightweight call to verify credentials
-            await genai.GenerativeModel.count_tokens_async(self._client, "warmup")
-            logger.info("Gemini connection warmed up successfully.")
-        except Exception as e:
-            logger.error(f"Gemini warm-up failed. Check API key and configuration. Error: {e}")
 
     def _clean_json_comments(self, json_text: str) -> str:
         """
@@ -158,136 +141,3 @@ class GeminiInvoiceProcessor:
             logger.error(f"Gemini structuring failed: {e}")
             return None, {"success": False, "error": str(e)}
 
-    async def structure_invoice_data_from_images(self, images: List[Image.Image]) -> Tuple[Optional[Invoice], Dict[str, Any]]:
-        """
-        Structures invoice data from PDF page images using Gemini Vision (multimodal).
-
-        This is the PREFERRED method for complex invoices because:
-        - Gemini can SEE visual structure (boxes, tables, highlighted sections)
-        - Better at identifying summary sections vs breakdowns
-        - Understands spatial layout and document hierarchy
-        - More accurate for multi-page consolidated invoices
-        - Enhanced with semantic ontology and few-shot learning
-
-        Args:
-            images: List of PIL Images (PDF pages converted to images)
-
-        Returns:
-            Tuple of (Invoice object or None, metadata dict)
-        """
-        logger.info(f"Structuring invoice data from {len(images)} images with Gemini Vision + semantic guidance.")
-
-        try:
-            # Generate dynamic schema from Pydantic model
-            schema = Invoice.model_json_schema()
-            schema_str = json.dumps(schema, indent=2)
-
-            # Use the comprehensive prompt with schema, semantic ontology, and few-shot example
-            prompt = get_structuring_prompt(schema_str)
-
-            # DEBUG: Log prompt size
-            prompt_size = len(prompt)
-            prompt_lines = prompt.count('\n')
-            logger.info(f"🔍 DEBUG - Prompt size: {prompt_size} chars, {prompt_lines} lines")
-
-            # Prepare content for multimodal request: [prompt, image1, image2, ...]
-            content = [prompt]
-            content.extend(images)
-
-            logger.info(f"Sending {len(images)} images to Gemini Flash-Lite Vision with semantic ontology...")
-
-            # Call Gemini with multimodal content (text + images)
-            response = await self._client.generate_content_async(content)
-
-            # DEBUG: Log raw response details
-            logger.info(f"🔍 DEBUG - Response received")
-            logger.info(f"🔍 DEBUG - Response.text length: {len(response.text) if response.text else 0}")
-            logger.info(f"🔍 DEBUG - Response.text first 200 chars: {response.text[:200] if response.text else 'EMPTY'}")
-
-            # Check if response has prompt_feedback (safety/blocking issues)
-            if hasattr(response, 'prompt_feedback'):
-                logger.info(f"🔍 DEBUG - Prompt feedback: {response.prompt_feedback}")
-
-            # Check candidates
-            if hasattr(response, 'candidates') and response.candidates:
-                logger.info(f"🔍 DEBUG - Number of candidates: {len(response.candidates)}")
-                for i, candidate in enumerate(response.candidates):
-                    logger.info(f"🔍 DEBUG - Candidate {i} finish_reason: {candidate.finish_reason if hasattr(candidate, 'finish_reason') else 'N/A'}")
-                    if hasattr(candidate, 'safety_ratings'):
-                        logger.info(f"🔍 DEBUG - Candidate {i} safety_ratings: {candidate.safety_ratings}")
-
-            # Parse the JSON response and strip markdown code blocks
-            json_text = response.text.strip()
-
-            if not json_text:
-                logger.error("❌ CRITICAL: Gemini returned empty response")
-                return None, {
-                    "success": False,
-                    "error": "Gemini returned empty response",
-                    "prompt_size": prompt_size,
-                    "mode": "vision"
-                }
-
-            # Remove markdown code blocks if present
-            if json_text.startswith('```'):
-                logger.info("🔧 Stripping markdown code block wrapper from response")
-                # Remove opening ```json or ```
-                lines = json_text.split('\n', 1)
-                if len(lines) > 1:
-                    json_text = lines[1]
-
-            if json_text.endswith('```'):
-                # Remove closing ```
-                json_text = json_text.rsplit('\n```', 1)[0]
-
-            json_text = json_text.strip()
-
-            invoice_dict = json.loads(json_text)
-
-            # Validate and create Pydantic object
-            invoice = Invoice.model_validate(invoice_dict)
-
-            metadata = {
-                "success": True,
-                "model": app_settings.ai_model.GEMINI_MODEL_NAME,
-                "mode": "vision_multimodal",
-                "num_pages": len(images),
-                "raw_json_length": len(json_text),
-            }
-            logger.info(f"✅ Successfully extracted invoice using vision mode")
-            return invoice, metadata
-
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ Failed to parse Gemini JSON response: {e}")
-            logger.error(f"❌ Raw response text: {response.text if 'response' in locals() else 'N/A'}")
-            logger.error(f"❌ Response text length: {len(response.text) if 'response' in locals() and response.text else 0}")
-            return None, {
-                "success": False,
-                "error": f"JSON parse error: {str(e)}",
-                "mode": "vision",
-                "prompt_size": prompt_size if 'prompt_size' in locals() else 0,
-                "response_length": len(response.text) if 'response' in locals() and response.text else 0
-            }
-        except ValueError as e:
-            # Pydantic validation errors are ValueError subclass
-            logger.error(f"Pydantic validation failed: {e}")
-            logger.error(f"Raw JSON that failed validation: {json_text if 'json_text' in locals() else 'N/A'}")
-            return None, {
-                "success": False,
-                "error": "Validation error",
-                "error_detail": str(e),
-                "error_type": "pydantic_validation",
-                "mode": "vision"
-            }
-        except Exception as e:
-            logger.error(f"❌ Gemini vision structuring failed: {e}")
-            logger.error(f"❌ Exception type: {type(e).__name__}")
-            import traceback
-            logger.error(f"❌ Traceback: {traceback.format_exc()}")
-            return None, {
-                "success": False,
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "mode": "vision",
-                "prompt_size": prompt_size if 'prompt_size' in locals() else 0
-            }
