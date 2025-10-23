@@ -5,6 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Fix malloc corruption in PaddlePaddle C++ code
+# MALLOC_ARENA_MAX limits memory arenas to prevent heap corruption
+# Recommended value: 2 for containerized environments (Heroku, Cloud Run)
+ENV MALLOC_ARENA_MAX=2
+
 # Install ALL system dependencies (build + runtime)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \

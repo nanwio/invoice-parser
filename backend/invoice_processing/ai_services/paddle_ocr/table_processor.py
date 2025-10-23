@@ -56,8 +56,8 @@ class InvoiceTableProcessor:
             'show_log': False,
             'table': True,              # Enable table recognition (critical for invoices)
             'ocr': True,                # Enable OCR within tables
-            'layout': False,            # ❌ DISABLED - paddleclas execution causes SIGSEGV in Cloud Run
-                                        # Note: paddleclas must be installed (PPStructure imports it) but layout=False prevents execution
+            'layout': True,             # ✅ ENABLED - layout=False disables OCR automatically (PPStructure bug)
+                                        # Fix malloc corruption with ENV MALLOC_ARENA_MAX=2 in Dockerfile
             'image_orientation': True,  # Enable rotation detection and correction
             'lang': 'en',               # Must be 'en' or 'ch' (layout model requirement)
             'use_gpu': False,
