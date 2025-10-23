@@ -30,11 +30,12 @@ RUN pip install --no-cache-dir --only-binary=:all: \
     pillow-heif==0.18.0 \
     pandas==2.1.4
 
-# Install paddlepaddle and paddleocr
-# NOTE: paddleclas removed - caused SIGSEGV crashes in Cloud Run (layout analysis disabled)
+# Install paddlepaddle, paddleocr, and paddleclas
+# NOTE: paddleclas required by PPStructure __init__, but layout=False prevents execution (avoids SIGSEGV)
 RUN pip install --no-cache-dir \
     paddlepaddle==2.6.0 \
     paddleocr==2.7.3 \
+    paddleclas==2.5.2 \
     opencv-python-headless==4.8.1.78
 
 # Install remaining dependencies
