@@ -40,7 +40,7 @@ WORKDIR /app
 # Copy pyproject.toml first for better layer caching
 COPY backend/pyproject.toml ./
 
-# Install numpy and other binary packages FIRST (ensures wheels are used)
+# Install numpy and 3other binary packages FIRST (ensures wheels are used)
 RUN pip install --no-cache-dir --only-binary=:all: \
     numpy==1.26.4 \
     pillow==10.4.0 \
@@ -52,8 +52,8 @@ RUN pip install --no-cache-dir --only-binary=:all: \
 # Use --ignore-installed to avoid conflicts with system packages (e.g., blinker)
 RUN pip uninstall -y paddlepaddle paddlepaddle-tiny || true && \
     pip install --no-cache-dir --ignore-installed \
-    paddlepaddle-gpu==2.6.1 \
-    paddleocr==2.7.3 \
+    paddlepaddle-gpu==2.6.2 \
+    paddleocr==2.7.0.3 \
     paddleclas==2.5.2 \
     opencv-python-headless==4.8.1.78
 
@@ -121,17 +121,21 @@ COPY --from=builder /usr/local/lib/python3.12/dist-packages /usr/local/lib/pytho
 # Copy application code from builder
 COPY --from=builder /app /app
 
-# Create directories for runtime model downloads (will be populated on first request)
-RUN mkdir -p /root/.paddleocr /root/.paddleclas
-
 # Create non-root user and set permissions
 RUN groupadd --system --gid 1001 appuser && \
     useradd --system --create-home --uid 1001 --gid 1001 appuser && \
-    chown -R appuser:appuser /app && \
-    chown -R appuser:appuser /root/.paddleocr /root/.paddleclas
+    chown -R appuser:appuser /app
 
 # Switch to non-root user for runtime
 USER appuser
+
+# Create directories for runtime model downloads in user's home
+# (models will be downloaded on first request)
+RUN mkdir -p /home/appuser/.paddleocr /home/appuser/.paddleclas
+
+# Set environment variables to use user's home for model cache
+ENV HOME=/home/appuser
+ENV PADDLEOCR_HOME=/home/appuser/.paddleocr
 
 # Expose port
 EXPOSE 8000

@@ -41,6 +41,7 @@ steps:
       - "1"
       - "--gpu-type"
       - "nvidia-l4"
+      - "--no-cpu-throttling"
       - "--port"
       - "8000"
       - "--remove-env-vars"
