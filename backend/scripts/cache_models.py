@@ -8,6 +8,12 @@ This script runs during Docker build (no GPU available) to download all required
 
 Models are cached to /root/.paddleocr and copied to final image.
 """
+import os
+
+# CRITICAL: Force CPU usage during Docker build (no GPU available)
+# This must be set BEFORE importing paddleocr/paddlepaddle
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
 from paddleocr import PPStructure
 from loguru import logger
 
