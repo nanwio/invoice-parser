@@ -58,7 +58,9 @@ RUN pip uninstall -y paddlepaddle paddlepaddle-tiny || true && \
     opencv-python-headless==4.8.1.78
 
 # Install remaining application dependencies
+# IMPORTANT: Pin numpy<2 to prevent upgrade (PaddlePaddle requires NumPy 1.x)
 RUN pip install --no-cache-dir \
+    "numpy<2" \
     fastapi==0.115.6 \
     uvicorn==0.32.1 \
     gunicorn==21.0.0 \
