@@ -25,6 +25,7 @@ RUN apt-get update && \
     libgl1 \
     libglib2.0-0 \
     curl \
+    swig \
     && rm -rf /var/lib/apt/lists/*
 
 # Make Python 3.12 the default
