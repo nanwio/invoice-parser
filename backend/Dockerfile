@@ -19,19 +19,21 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     python3.12 \
     python3.12-dev \
-    python3-pip \
+    python3.12-venv \
     build-essential \
     poppler-utils \
     libgl1 \
     libglib2.0-0 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Make Python 3.12 the default
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1
 
-# Upgrade pip for Python 3.12
-RUN python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+# Install pip for Python 3.12 using ensurepip (built-in module)
+RUN python3.12 -m ensurepip --upgrade && \
+    python3.12 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
 WORKDIR /app
 
@@ -100,7 +102,6 @@ RUN apt-get update && \
     && apt-get update && \
     apt-get install -y --no-install-recommends \
     python3.12 \
-    python3-pip \
     poppler-utils \
     libgl1 \
     libglib2.0-0 \
