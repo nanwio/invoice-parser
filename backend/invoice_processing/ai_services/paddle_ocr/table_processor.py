@@ -56,12 +56,12 @@ class InvoiceTableProcessor:
             'show_log': False,
             'table': True,              # Enable table recognition (critical for invoices)
             'ocr': True,                # Enable OCR within tables
-            'layout': True,             # ✅ ENABLE layout analysis for better column detection
+            'layout': False,            # ❌ DISABLED - paddleclas causes SIGSEGV in Cloud Run (even with cpu_threads=1)
             'image_orientation': True,  # Enable rotation detection and correction
             'lang': 'en',               # Must be 'en' or 'ch' (layout model requirement)
             'use_gpu': False,
             'enable_mkldnn': True,      # Intel CPU optimization (for Cloud Run, disabled on macOS via config)
-            'cpu_threads': 1,           # 🔧 FIX: Single thread prevents segfault with paddleclas (PaddleOCR#14497)
+            'cpu_threads': 1,           # Single thread for stability
         }
 
         logger.success("PPStructure table processor initialized with thread-local storage")
