@@ -91,7 +91,8 @@ COPY backend/invoice_processing ./invoice_processing
 # Models will be downloaded to /root/.paddleocr on first inference (~40MB total)
 
 # ==================== STAGE 2: Final runtime image ====================
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+# Use devel image instead of runtime to have all cuDNN libraries needed by PaddlePaddle
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
