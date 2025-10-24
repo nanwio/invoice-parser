@@ -202,7 +202,10 @@ class LineItem(BaseModel):
         None,
         description="If present, a description of this item."
     )
-    quantity: int
+    quantity: float = Field(
+        ...,
+        description="Quantity of this item. Can be decimal for services (e.g., 172.65 kWh, 2.5 hours)"
+    )
     unit_price: float = Field(ge=0)
     line_total: float = Field(ge=0)
 
