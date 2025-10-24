@@ -143,4 +143,4 @@ EXPOSE 8000
 
 # CRITICAL: GPU only supports 1 worker (concurrent requests handled by async)
 # Use gunicorn with 1 worker, 300s timeout for model loading
-CMD ["gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "300", "--chdir", "/app", "app:app"]
+CMD ["python", "-m", "gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "300", "--chdir", "/app", "app:app"]
