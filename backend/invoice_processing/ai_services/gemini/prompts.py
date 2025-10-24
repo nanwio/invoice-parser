@@ -119,10 +119,21 @@ Explanation:
 1. **Código/Referencia** → Reference code (ignore for extraction)
 2. **Descripción/Concepto** → Item description
 3. **Cantidad/Unidades** → quantity
-4. **Precio Unitario/PVP/PVPr** → **unit_price** ⚠️ THIS IS THE PRICE
+4. **Precio Unitario/PVP/PVPr** → **unit_price** (original price before discounts)
 5. **% Dto/Dto** → Discount percentage (NOT unit price!)
 6. **IGIC/IVA/%** → Tax rate percentage ⚠️ NOT UNIT PRICE (3%, 7%, 15%)
-7. **Importe/Subtotal** → line_total
+7. **Importe/Subtotal/Total** → **line_total** ⚠️ CRITICAL: USE THIS, NOT PRECIO
+
+**🚨 CRITICAL - IMPORTE vs PRECIO:**
+- If table has BOTH "Precio" (column 4) AND "Importe" (column 7):
+  - **unit_price** = Value from "Precio" column (pre-discount)
+  - **line_total** = Value from "Importe" column (post-discount) ← USE THIS
+  - **DO NOT** manually apply discount % to calculate line_total
+  - **Example**: Precio=61.00, Dto=15%, Importe=51.85 → unit_price=61.00, line_total=51.85 ✅
+
+- If table has ONLY "Precio" (no "Importe" column):
+  - **unit_price** = Value from "Precio"
+  - **line_total** = quantity × unit_price
 
 **⚠️ COMMON ERROR TO AVOID:**
 If you see many items with `unit_price = 3.0` or `unit_price = 7.0`, **YOU ARE READING THE WRONG COLUMN**
@@ -514,9 +525,12 @@ These fields are ALWAYS extracted when present:
 
 **Financial Details:**
 - `currency`: **ISO 4217 3-letter code ONLY** (EUR, USD, GBP). If you see symbols, convert: €→EUR, $→USD, £→GBP. Spanish invoices default to EUR.
-- `subtotal`: **Sum of line items ONLY** (goods/services being sold). DO NOT include surcharges, discounts, or taxes in subtotal.
-  - **Example calculation**: items[12.50€ + 21.88€] = 34.38€ subtotal
-  - **WRONG**: Including surcharges or taxes in subtotal
+- `subtotal`: **Sum of ALL line_total values from items[]**. DO NOT include surcharges, discounts, or taxes.
+  - **CRITICAL**: Sum the "Importe" column values (line_total), NOT "Precio" × quantity
+  - **If items have individual discounts** applied (shown in "Dto" column), the "Importe" already includes them
+  - **Example calculation**: items[line_total: 1.72€ + 5.82€ + 18.47€] = 26.01€ subtotal
+  - **WRONG**: Using unit_price × quantity when line_total is different due to discounts
+  - **WRONG**: Including surcharges or global taxes in subtotal
   - For multi-period invoices, use the consolidated item values from summary, NOT period breakdowns.
 - `tax`: Primary tax details - **CRITICAL: Extract from SUMMARY section ONLY**
   - **For utility bills:** Use value from "RESUMEN DE LA FACTURA", NOT from "DESGLOSE PERIODO"
@@ -568,7 +582,13 @@ These fields are ALWAYS extracted when present:
   - `type`: Name of withholding
   - `rate`: Percentage
   - `amount`: Amount withheld (subtracted from total)
-- `discount`: Discount applied (if present)
+- `discount`: **CRITICAL - Only extract if explicitly shown as GLOBAL discount**
+  - **NEVER auto-detect discount** by comparing unit_price vs line_total
+  - Only extract if invoice shows: "Descuento global", "Dto. general", "Total descuento", etc.
+  - **If line items have individual discounts** (shown in "Dto" column), these are ALREADY APPLIED in "Importe" column
+  - **Do NOT create a discount field** based on calculations - only if explicitly labeled
+  - **Example of when to extract**: "Subtotal: 100€, Descuento 10%: -10€, Total: 90€" ✅
+  - **Example of when NOT to extract**: Items have "Dto 5%" column but no global discount line ❌
 - `surcharges`: Additional fees or surcharges
 - `total_amount`: **FINAL amount to be paid** (most critical field) - Extract from summary
 - `payment`: Payment method information (optional, use null if not found)

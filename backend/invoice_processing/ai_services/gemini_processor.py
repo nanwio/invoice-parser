@@ -82,6 +82,18 @@ class GeminiInvoiceProcessor:
         logger.info("Structuring invoice data from OCR text with Gemini JSON mode + semantic guidance.")
 
         try:
+            # CRITICAL: Truncate extremely long OCR text to prevent Gemini timeout
+            # Gemini Flash can handle ~1M tokens input, but very long docs (>150k chars) cause timeouts/quality issues
+            MAX_OCR_LENGTH = 150000  # Conservative limit: ~30k tokens
+            original_length = len(ocr_text)
+
+            if original_length > MAX_OCR_LENGTH:
+                logger.warning(f"OCR text is very long ({original_length} chars). Truncating to {MAX_OCR_LENGTH} chars to prevent timeout.")
+                # Truncate but keep beginning (has summary) and end (has totals)
+                # Keep first 100k + last 50k chars
+                ocr_text = ocr_text[:100000] + "\n\n[... MIDDLE CONTENT TRUNCATED ...]\n\n" + ocr_text[-50000:]
+                logger.info(f"Truncated OCR text from {original_length} to {len(ocr_text)} chars")
+
             # Generate dynamic schema from Pydantic model
             schema = Invoice.model_json_schema()
             schema_str = json.dumps(schema, indent=2)
