@@ -108,6 +108,7 @@ RUN apt-get update && \
     poppler-utils \
     libgl1 \
     libglib2.0-0 \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Make Python 3.12 the default
