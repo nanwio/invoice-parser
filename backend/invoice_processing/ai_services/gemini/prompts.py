@@ -602,12 +602,19 @@ These fields are ALWAYS extracted when present:
   - `number`: Extract bank account/IBAN EXACTLY as shown, including asterisks if present
 
 **Line Items:**
-- `items`: Array of all invoice items
+- `items`: Array of all invoice items **🚨 ONLY goods/services sold, NEVER discounts, taxes, or surcharges**
   - `description`: Item description
   - `quantity`: **REQUIRED numeric field** - Quantity ordered/delivered (float). If OCR unclear, use 1.0, NEVER null
-  - `unit_price`: **REQUIRED numeric field** - Price per unit (float, ≥0). If OCR unclear, use 0.0, NEVER null
-  - `line_total`: **REQUIRED numeric field** - Total for this line (float, ≥0). If OCR unclear, use 0.0, NEVER null
+  - `unit_price`: **REQUIRED numeric field** - Price per unit (float, **≥0**, NEVER negative). If OCR unclear, use 0.0, NEVER null
+  - `line_total`: **REQUIRED numeric field** - Total for this line (float, **≥0**, NEVER negative). If OCR unclear, use 0.0, NEVER null
   - **CRITICAL**: All three numeric fields (quantity, unit_price, line_total) are REQUIRED and cannot be null/None. If you cannot extract a value from OCR, use 0.0 instead of null.
+  - **🚨 NEVER include as items**:
+    - Discounts (e.g., "Descuento 15%", "Dto. pronto pago") → Goes to `financial_details.discount`
+    - Taxes (e.g., "IGIC 7%", "IVA 21%", "Impuesto electricidad") → Goes to `financial_details.tax` or `additional_taxes`
+    - Surcharges (e.g., "Recargo", "Alquiler contador") → Goes to `financial_details.surcharges`
+    - **If you see negative values** → It's NOT an item, classify correctly
+  - **Example of WRONG extraction**: `{"description": "Descuento 15%", "unit_price": -4.17}` ❌
+  - **Example of CORRECT extraction**: Extract "Descuento 15%" as `financial_details.discount = {"rate": 15.0, "amount": 4.17}` ✅
 
 **Notes:**
 - `notes`: General comments, terms, conditions, or observations in free text
