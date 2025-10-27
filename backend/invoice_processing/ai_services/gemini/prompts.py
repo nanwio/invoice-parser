@@ -613,8 +613,8 @@ These fields are ALWAYS extracted when present:
     - Taxes (e.g., "IGIC 7%", "IVA 21%", "Impuesto electricidad") → Goes to `financial_details.tax` or `additional_taxes`
     - Surcharges (e.g., "Recargo", "Alquiler contador") → Goes to `financial_details.surcharges`
     - **If you see negative values** → It's NOT an item, classify correctly
-  - **Example of WRONG extraction**: `{"description": "Descuento 15%", "unit_price": -4.17}` ❌
-  - **Example of CORRECT extraction**: Extract "Descuento 15%" as `financial_details.discount = {"rate": 15.0, "amount": 4.17}` ✅
+  - **Example of WRONG extraction**: `{{"description": "Descuento 15%", "unit_price": -4.17}}` ❌
+  - **Example of CORRECT extraction**: Extract "Descuento 15%" as `financial_details.discount = {{"rate": 15.0, "amount": 4.17}}` ✅
 
 **Notes:**
 - `notes`: General comments, terms, conditions, or observations in free text
