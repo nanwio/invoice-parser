@@ -544,6 +544,10 @@ These fields are ALWAYS extracted when present:
     - Use `IVA` for mainland Spanish/EU VAT
     - Use `EXEMPT` if explicitly tax-exempt
     - Use `OTHER` for ANY other tax type (Electricity Tax, Environmental Tax, etc.)
+  - `taxable_base`: **OPTIONAL** - Extract if invoice shows "s/" notation (sobre/on)
+    - **Example**: "IGIC Reducido 3% s/88,45 €" → rate: 3.0, amount: 2.65, taxable_base: 88.45 ✅
+    - **Example**: "Impuesto electricidad 5.11% s/84,15 €" → taxable_base: 84.15 ✅
+    - **If not shown**: Use null (validator will calculate from subtotal - discount)
   - **Auto-detection rules** (apply BEFORE extraction):
     1. Check vendor/customer addresses for Canary Islands keywords → IGIC
     2. Check for explicit "IGIC" mentions in document → IGIC
@@ -566,6 +570,8 @@ These fields are ALWAYS extracted when present:
   - **WRONG:** "Nota sección actual: IGIC 1,12 €" → IGNORE ❌
   - Common: "Impuesto electricidad", "IGIC normal/reducido", Environmental taxes
   - Each needs: type (use "IGIC" for IGIC taxes, "OTHER" for others), rate, amount
+  - **taxable_base** (optional): Extract if "s/" notation present (same rule as primary tax)
+    - **Example**: "IGIC Normal 7% s/4,09 €" → {{"type": "IGIC", "rate": 7.0, "amount": 0.29, "taxable_base": 4.09}}
   - **CRITICAL**: Use consolidated totals from page 1 summary, ignore period breakdowns from pages 2+
   - **IMPORTANT**: Extract ALL tax lines from RESUMEN, even small amounts (e.g., 0.05€). Do not skip any tax.
   - **SPECIAL CASE - Tax Tables**: If invoice shows "Base IGIC:" table with multiple rates:
@@ -611,6 +617,16 @@ These fields are ALWAYS extracted when present:
   - `unit_price`: **REQUIRED numeric field** - Price per unit (float, **≥0**, NEVER negative). If OCR unclear, use 0.0, NEVER null
   - `line_total`: **REQUIRED numeric field** - Total for this line (float, **≥0**, NEVER negative). If OCR unclear, use 0.0, NEVER null
   - **CRITICAL**: All three numeric fields (quantity, unit_price, line_total) are REQUIRED and cannot be null/None. If you cannot extract a value from OCR, use 0.0 instead of null.
+
+  **🔧 SPECIAL: Utility bills (electricity/gas/water) with formula lines:**
+  - Lines like: "Potencia facturada Punta 13,856 kW x 29 días x 0,113358 €/kW día 45,55 €"
+  - **Parsing rule**: quantity = MULTIPLY factors before price, unit_price = price rate, line_total = final amount
+  - **Example**: "13,856 kW x 29 días x 0,113358 €/kW día 45,55 €"
+    - quantity = 13.856 × 29 = 401.424 ✅
+    - unit_price = 0.113358 ✅
+    - line_total = 45.55 ✅
+  - **WRONG**: quantity = 45.55, unit_price = 1.0 ❌ (DO NOT use line_total as quantity!)
+  - **Pattern detection**: If you see "X unit × Y days × Z €/unit" → multiply X × Y for quantity, use Z for unit_price
   - **🚨 NEVER include as items**:
     - Discounts (e.g., "Descuento 15%", "Dto. pronto pago") → Goes to `financial_details.discount`
     - Taxes (e.g., "IGIC 7%", "IVA 21%", "Impuesto electricidad") → Goes to `financial_details.tax` or `additional_taxes`

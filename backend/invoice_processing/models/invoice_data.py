@@ -86,6 +86,10 @@ class Tax(BaseModel):
         ...,
         description="Total tax amount in the invoice currency"
     )
+    taxable_base: Optional[float] = Field(
+        None,
+        description="Taxable base amount (base imponible) for this specific tax. Used when different taxes have different bases (e.g., utility bills)"
+    )
 
 
 class Withholding(BaseModel):
