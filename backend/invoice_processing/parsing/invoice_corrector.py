@@ -294,39 +294,29 @@ class InvoiceFinancialCorrector:
     @classmethod
     def verify_and_fix_subtotal(cls, invoice: Invoice) -> Invoice:
         """
-        Verify subtotal matches sum of items (considering discounts).
+        ALWAYS recalculate subtotal as the EXACT sum of all line_total values.
 
-        If not, recalculate from items sum.
+        This ensures 100% mathematical accuracy regardless of Gemini's calculation.
+        Subtotal = items[0].line_total + items[1].line_total + ... + items[N].line_total
         """
+        # Calculate the EXACT sum of all line items
         items_sum = sum(item.line_total for item in invoice.items)
         current_subtotal = invoice.financial_details.subtotal
 
-        # Expected subtotal after discount
-        discount = invoice.financial_details.discount
-        expected_subtotal = items_sum
-        if discount:
-            expected_subtotal = items_sum - discount.amount
+        # Round to 2 decimals to avoid floating point errors
+        items_sum = round(items_sum, 2)
 
-        # Allow 0.10€ tolerance
-        difference = abs(current_subtotal - expected_subtotal)
+        # Check if correction is needed (tolerance: 0.01€)
+        difference = abs(current_subtotal - items_sum)
 
-        if difference > 0.10:
+        if difference > 0.01:
             logger.warning(
-                f"🔧 CORRECTION: Subtotal mismatch - current: {current_subtotal}€, "
-                f"expected: {expected_subtotal}€ (items: {items_sum}€, "
-                f"discount: {discount.amount if discount else 0}€)"
+                f"🔧 CORRECTION: Subtotal recalculated from {current_subtotal}€ to {items_sum}€ "
+                f"(difference: {difference:.2f}€) - using exact sum of {len(invoice.items)} line items"
             )
-
-            # Fix: If current subtotal matches items_sum, it's probably the GROSS subtotal
-            # In that case, don't change it - it's correct as the pre-discount value
-            if abs(current_subtotal - items_sum) < 0.10:
-                logger.info(
-                    "✓ Subtotal appears to be gross (before discount), keeping as-is"
-                )
-            else:
-                # Otherwise, recalculate
-                invoice.financial_details.subtotal = round(expected_subtotal, 2)
-                logger.info(f"✓ Recalculated subtotal to {invoice.financial_details.subtotal}€")
+            invoice.financial_details.subtotal = items_sum
+        else:
+            logger.debug(f"✓ Subtotal verified: {items_sum}€ matches sum of {len(invoice.items)} items")
 
         return invoice
 

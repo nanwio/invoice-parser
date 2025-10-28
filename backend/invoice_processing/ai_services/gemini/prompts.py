@@ -525,12 +525,15 @@ These fields are ALWAYS extracted when present:
 
 **Financial Details:**
 - `currency`: **ISO 4217 3-letter code ONLY** (EUR, USD, GBP). If you see symbols, convert: €→EUR, $→USD, £→GBP. Spanish invoices default to EUR.
-- `subtotal`: **Sum of ALL line_total values from items[]**. DO NOT include surcharges, discounts, or taxes.
-  - **CRITICAL**: Sum the "Importe" column values (line_total), NOT "Precio" × quantity
-  - **If items have individual discounts** applied (shown in "Dto" column), the "Importe" already includes them
-  - **Example calculation**: items[line_total: 1.72€ + 5.82€ + 18.47€] = 26.01€ subtotal
-  - **WRONG**: Using unit_price × quantity when line_total is different due to discounts
-  - **WRONG**: Including surcharges or global taxes in subtotal
+- `subtotal`: **CRITICAL - EXACT SUM of ALL line_total values from items[]**. DO NOT calculate, DO NOT estimate, ONLY SUM.
+  - **MATHEMATICAL RULE**: subtotal = items[0].line_total + items[1].line_total + items[2].line_total + ... + items[N].line_total
+  - **STEP 1**: Extract all line_total values: [45.55, 14.80, 27.79]
+  - **STEP 2**: Sum them EXACTLY: 45.55 + 14.80 + 27.79 = 88.14
+  - **STEP 3**: Use that sum as subtotal: "subtotal": 88.14
+  - **DO NOT**: Use "Precio" × quantity when "Importe" exists
+  - **DO NOT**: Include surcharges, discounts, or taxes in subtotal
+  - **DO NOT**: Use any value from invoice summary/footer - ONLY sum items[]
+  - **VERIFY**: After extraction, confirm subtotal matches the sum of all line_total values
   - For multi-period invoices, use the consolidated item values from summary, NOT period breakdowns.
 - `tax`: Primary tax details - **CRITICAL: Extract from SUMMARY section ONLY**
   - **For utility bills:** Use value from "RESUMEN DE LA FACTURA", NOT from "DESGLOSE PERIODO"
@@ -711,6 +714,12 @@ The JSON must strictly conform to the following Pydantic model schema:
 - Surcharges = vendor fees (Recargo, Alquiler)
 - Extract financial values from SUMMARY section only
 - **Multiple tax rates:** PRIMARY tax = largest amount, ALL OTHERS go to additional_taxes[]
+
+**FINAL VERIFICATION (DO THIS BEFORE RETURNING JSON):**
+1. **Check subtotal math**: Sum all items[].line_total values. Does it equal financial_details.subtotal? If not, FIX IT.
+2. **Check total formula**: subtotal - discount + taxes + surcharges - withholding = total_amount? If not, FIX IT.
+3. **Check for negative values**: Are any line items negative? If yes, they are NOT items - reclassify them.
+4. **Check discount classification**: Is discount in items[]? If yes, MOVE IT to financial_details.discount.
 
 [OCR TEXT TO PROCESS]
 """
