@@ -362,27 +362,41 @@ class InvoiceFinancialCorrector:
         difference = abs(expected_total - actual_total)
 
         if difference > 0.10:
-            # Detailed error message with breakdown
-            error_msg = (
-                f"Math error: expected {expected_total:.2f}€ ≠ actual {actual_total:.2f}€ "
-                f"(difference: {difference:.2f}€)"
-            )
-            errors.append(error_msg)
+            # Check if this is a multi-period invoice with regularizations
+            # These invoices may have totals that don't match simple formula (expected behavior)
+            is_multi_period = invoice.extensions and invoice.extensions.get('multi_period_invoice', {}).get('has_regularizations', False)
 
-            # Log detailed breakdown for debugging
-            logger.error(
-                f"💰 Financial validation failed:\n"
-                f"  Subtotal (bruto):        {subtotal:>8.2f}€\n"
-                f"  - Discount:              {discount:>8.2f}€\n"
-                f"  = Base imponible:        {base_imponible:>8.2f}€\n"
-                f"  + Tax (main):            {tax_amount:>8.2f}€\n"
-                f"  + Additional taxes:      {additional_taxes:>8.2f}€\n"
-                f"  + Surcharges:            {surcharges:>8.2f}€\n"
-                f"  - Withholding:           {withholding:>8.2f}€\n"
-                f"  = Expected total:        {expected_total:>8.2f}€\n"
-                f"  vs Actual total:         {actual_total:>8.2f}€\n"
-                f"  → Difference:            {difference:>8.2f}€ ❌"
-            )
+            if is_multi_period:
+                # This is EXPECTED for multi-period invoices - don't treat as error OR warning
+                # Just log it for information
+                logger.info(
+                    f"ℹ️  Multi-period invoice detected with regularizations - total mismatch is expected:\n"
+                    f"  Calculated from current period: {expected_total:>8.2f}€\n"
+                    f"  Actual total (with regularizations): {actual_total:>8.2f}€\n"
+                    f"  → Difference: {difference:>8.2f}€ (likely from previous period adjustments) ✓ NORMAL"
+                )
+            else:
+                # Regular invoice - this IS an error
+                error_msg = (
+                    f"Math error: expected {expected_total:.2f}€ ≠ actual {actual_total:.2f}€ "
+                    f"(difference: {difference:.2f}€)"
+                )
+                errors.append(error_msg)
+
+                # Log detailed breakdown for debugging
+                logger.error(
+                    f"💰 Financial validation failed:\n"
+                    f"  Subtotal (bruto):        {subtotal:>8.2f}€\n"
+                    f"  - Discount:              {discount:>8.2f}€\n"
+                    f"  = Base imponible:        {base_imponible:>8.2f}€\n"
+                    f"  + Tax (main):            {tax_amount:>8.2f}€\n"
+                    f"  + Additional taxes:      {additional_taxes:>8.2f}€\n"
+                    f"  + Surcharges:            {surcharges:>8.2f}€\n"
+                    f"  - Withholding:           {withholding:>8.2f}€\n"
+                    f"  = Expected total:        {expected_total:>8.2f}€\n"
+                    f"  vs Actual total:         {actual_total:>8.2f}€\n"
+                    f"  → Difference:            {difference:>8.2f}€ ❌"
+                )
 
         # Check items sum
         items_sum = sum(item.line_total for item in invoice.items)

@@ -102,7 +102,11 @@ class GeminiInvoiceProcessor:
             full_prompt = get_structuring_prompt(schema_str) + ocr_text
 
             # Call Gemini with JSON mode
-            response = await self._client.generate_content_async(full_prompt)
+            # IMPORTANT: Timeout set to 120s (default 60s was too short for large invoices)
+            response = await self._client.generate_content_async(
+                full_prompt,
+                request_options={"timeout": 120}
+            )
 
             # Parse the JSON response and strip markdown code blocks
             json_text = response.text.strip()
@@ -123,7 +127,41 @@ class GeminiInvoiceProcessor:
             # CRITICAL: Remove any JSON comments that Gemini might have added
             json_text = self._clean_json_comments(json_text)
 
-            invoice_dict = json.loads(json_text)
+            # CRITICAL: Validate JSON before parsing (detect truncation/corruption)
+            # For very long invoices, Gemini may generate incomplete JSON
+            try:
+                invoice_dict = json.loads(json_text)
+            except json.JSONDecodeError as e:
+                # Try to fix common JSON corruption issues
+                logger.warning(f"JSON parsing failed at position {e.pos}: {e.msg}")
+                logger.warning(f"Attempting to repair JSON (likely truncated response from Gemini)")
+
+                # Find the last valid closing brace
+                # Strategy: Remove incomplete trailing content and close the JSON properly
+                truncate_pos = e.pos
+                json_text_truncated = json_text[:truncate_pos].rstrip()
+
+                # Try to close the JSON by adding missing closing braces
+                # Count unclosed braces
+                open_braces = json_text_truncated.count('{') - json_text_truncated.count('}')
+                open_brackets = json_text_truncated.count('[') - json_text_truncated.count(']')
+
+                # Remove trailing comma if present
+                if json_text_truncated.endswith(','):
+                    json_text_truncated = json_text_truncated[:-1]
+
+                # Add missing closing brackets and braces
+                json_text_repaired = json_text_truncated + (']' * open_brackets) + ('}' * open_braces)
+
+                logger.info(f"Repaired JSON: added {open_brackets} closing brackets and {open_braces} closing braces")
+
+                try:
+                    invoice_dict = json.loads(json_text_repaired)
+                    logger.warning(f"✓ JSON repair successful! Parsed truncated invoice with potentially incomplete items list.")
+                except json.JSONDecodeError as e2:
+                    # Repair failed, raise original error
+                    logger.error(f"JSON repair failed: {e2}")
+                    raise e  # Raise original error
 
             # Validate and create Pydantic object
             invoice = Invoice.model_validate(invoice_dict)
