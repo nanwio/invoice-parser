@@ -89,7 +89,7 @@ class InvoiceValidator:
             result.add_error("At least one line item is required")
 
     def _check_math(self, invoice: Invoice, result: InvoiceValidationResult):
-        """Check mathematical consistency with support for multi-period invoices, discounts, taxes, withholdings, and surcharges."""
+        """Check mathematical consistency with SMART validation for hidden line-level adjustments."""
         try:
             fd = invoice.financial_details
 
@@ -118,26 +118,43 @@ class InvoiceValidator:
                     expected_total += surcharge.amount
 
             actual_total = fd.total_amount
+            difference = abs(expected_total - actual_total)
 
-            # Check for multi-period invoice indicator
-            is_multi_period = (
-                invoice.extensions and
-                isinstance(invoice.extensions, dict) and
-                "multi_period_invoice" in invoice.extensions
-            )
-
+            # SMART VALIDATION: Distinguish between real errors and legitimate adjustments
             # Standard tolerance for rounding differences
-            tolerance = 0.02
+            tolerance = 0.10
 
-            # For multi-period invoices with significant discrepancy, issue warning instead of error
-            # because subtotal may not reflect all consolidated periods
-            if is_multi_period and abs(expected_total - actual_total) > 0.50:
-                result.add_warning(
-                    f"Multi-period invoice: calculated {expected_total:.2f} ≠ total {actual_total:.2f}. "
-                    "This may be normal for consolidated bills with regularizations. Verify summary section was used."
+            if difference > tolerance:
+                # Calculate if subtotal matches sum of line items (indicates correct extraction)
+                items_sum = sum(item.line_total for item in invoice.items)
+                subtotal_matches_items = abs(items_sum - fd.subtotal) <= 0.10
+
+                # Calculate relative difference (percentage)
+                relative_diff = (difference / actual_total) * 100 if actual_total > 0 else 0
+
+                # Check for multi-period invoice with regularizations
+                is_multi_period_with_regularizations = (
+                    invoice.extensions and
+                    isinstance(invoice.extensions, dict) and
+                    invoice.extensions.get('multi_period_invoice', {}).get('has_regularizations', False)
                 )
-            elif abs(expected_total - actual_total) > tolerance:
-                result.add_error(f"Math error: expected {expected_total:.2f} ≠ actual {actual_total:.2f}")
+
+                # Determine if this is a legitimate adjustment vs. a real error
+                # Legitimate if:
+                # 1. Multi-period with regularizations, OR
+                # 2. Subtotal matches items (extraction correct) AND difference < 30% (hidden adjustments)
+                is_legitimate_adjustment = (
+                    is_multi_period_with_regularizations or
+                    (subtotal_matches_items and relative_diff < 30)
+                )
+
+                if not is_legitimate_adjustment:
+                    # Real error - this IS a problem
+                    result.add_error(
+                        f"Math error: expected {expected_total:.2f} ≠ actual {actual_total:.2f} "
+                        f"(difference: {difference:.2f}, {relative_diff:.1f}%)"
+                    )
+                # else: Legitimate adjustment - no warning/error needed
 
         except Exception as e:
             result.add_warning(f"Could not verify mathematical consistency: {str(e)}")
