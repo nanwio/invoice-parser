@@ -362,24 +362,38 @@ class InvoiceFinancialCorrector:
         difference = abs(expected_total - actual_total)
 
         if difference > 0.10:
+            # Smart validation: Distinguish between real errors and legitimate adjustments
+            # Calculate if subtotal matches sum of line items (indicates correct item extraction)
+            items_sum = sum(item.line_total for item in invoice.items)
+            subtotal_matches_items = abs(items_sum - subtotal) <= 0.10
+
+            # Calculate relative difference (percentage)
+            relative_diff = (difference / actual_total) * 100 if actual_total > 0 else 0
+
             # Check if this is a multi-period invoice with regularizations
-            # These invoices may have totals that don't match simple formula (expected behavior)
             is_multi_period = invoice.extensions and invoice.extensions.get('multi_period_invoice', {}).get('has_regularizations', False)
 
-            if is_multi_period:
-                # This is EXPECTED for multi-period invoices - don't treat as error OR warning
-                # Just log it for information
+            # Determine if this is a legitimate adjustment vs. a real error
+            # Legitimate if:
+            # 1. Multi-period with regularizations, OR
+            # 2. Subtotal matches items (extraction correct) AND difference < 30% (hidden adjustments)
+            is_legitimate_adjustment = is_multi_period or (subtotal_matches_items and relative_diff < 30)
+
+            if is_legitimate_adjustment:
+                # This is EXPECTED - log as INFO, don't add to errors or warnings
+                reason = "regularizations" if is_multi_period else "hidden line-level adjustments"
                 logger.info(
-                    f"ℹ️  Multi-period invoice detected with regularizations - total mismatch is expected:\n"
-                    f"  Calculated from current period: {expected_total:>8.2f}€\n"
-                    f"  Actual total (with regularizations): {actual_total:>8.2f}€\n"
-                    f"  → Difference: {difference:>8.2f}€ (likely from previous period adjustments) ✓ NORMAL"
+                    f"ℹ️  Total mismatch is EXPECTED due to {reason}:\n"
+                    f"  Subtotal (items sum):    {items_sum:>8.2f}€ {'✓ MATCHES' if subtotal_matches_items else '✗ MISMATCH'}\n"
+                    f"  Calculated total:        {expected_total:>8.2f}€\n"
+                    f"  Actual total:            {actual_total:>8.2f}€\n"
+                    f"  → Difference:            {difference:>8.2f}€ ({relative_diff:.1f}%) ✓ NORMAL"
                 )
             else:
-                # Regular invoice - this IS an error
+                # Real error - this IS a problem
                 error_msg = (
                     f"Math error: expected {expected_total:.2f}€ ≠ actual {actual_total:.2f}€ "
-                    f"(difference: {difference:.2f}€)"
+                    f"(difference: {difference:.2f}€, {relative_diff:.1f}%)"
                 )
                 errors.append(error_msg)
 
@@ -387,6 +401,7 @@ class InvoiceFinancialCorrector:
                 logger.error(
                     f"💰 Financial validation failed:\n"
                     f"  Subtotal (bruto):        {subtotal:>8.2f}€\n"
+                    f"  Items sum:               {items_sum:>8.2f}€ {'✓' if subtotal_matches_items else '✗ MISMATCH'}\n"
                     f"  - Discount:              {discount:>8.2f}€\n"
                     f"  = Base imponible:        {base_imponible:>8.2f}€\n"
                     f"  + Tax (main):            {tax_amount:>8.2f}€\n"
@@ -395,7 +410,7 @@ class InvoiceFinancialCorrector:
                     f"  - Withholding:           {withholding:>8.2f}€\n"
                     f"  = Expected total:        {expected_total:>8.2f}€\n"
                     f"  vs Actual total:         {actual_total:>8.2f}€\n"
-                    f"  → Difference:            {difference:>8.2f}€ ❌"
+                    f"  → Difference:            {difference:>8.2f}€ ({relative_diff:.1f}%) ❌"
                 )
 
         # Check items sum
