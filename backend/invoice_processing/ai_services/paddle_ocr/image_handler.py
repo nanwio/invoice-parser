@@ -35,7 +35,7 @@ class ImageHandler:
         Yields:
             A PIL Image for each page in the PDF.
         """
-        optimal_dpi = 120  # Reduced from 150 for faster processing (still sufficient for OCR)
+        optimal_dpi = 70  # Aggressive reduction for maximum speed
 
         images_from_pdf = convert_from_path(
             pdf_path,
