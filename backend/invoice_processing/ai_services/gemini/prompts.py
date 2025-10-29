@@ -627,6 +627,14 @@ These fields are ALWAYS extracted when present:
     - line_total = 45.55 ✅
   - **WRONG**: quantity = 45.55, unit_price = 1.0 ❌ (DO NOT use line_total as quantity!)
   - **Pattern detection**: If you see "X unit × Y days × Z €/unit" → multiply X × Y for quantity, use Z for unit_price
+
+  **🔧 SPECIAL: Tables with intermediate discount/surcharge columns:**
+  - Some invoices have tables like: "Quantity | Unit Price | Discount/Surcharge | Line Total"
+  - **Example**: "36 units | 0.540€ | 5.00€ | 18.47€"
+  - **Parsing rule**: Use the FINAL line_total column (rightmost), NOT intermediate values
+  - **The math may not match** (36 × 0.54 = 19.44 ≠ 18.47) because there's a hidden discount
+  - **DO NOT force mathematical consistency** - just extract what's shown in the line_total column
+  - If you see intermediate columns between unit_price and line_total, **ignore them** and use the final amount
   - **🚨 NEVER include as items**:
     - Discounts (e.g., "Descuento 15%", "Dto. pronto pago") → Goes to `financial_details.discount`
     - Taxes (e.g., "IGIC 7%", "IVA 21%", "Impuesto electricidad") → Goes to `financial_details.tax` or `additional_taxes`
