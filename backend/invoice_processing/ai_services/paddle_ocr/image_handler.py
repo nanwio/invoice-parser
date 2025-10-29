@@ -28,22 +28,22 @@ class ImageHandler:
         """
         Convert PDF to a generator of PIL Images, one for each page.
         This is highly memory-efficient for large PDFs.
-        
+
         Args:
             pdf_path: Path to the PDF file.
-            
+
         Yields:
             A PIL Image for each page in the PDF.
         """
-        optimal_dpi = 150
-        
+        optimal_dpi = 120  # Reduced from 150 for faster processing (still sufficient for OCR)
+
         images_from_pdf = convert_from_path(
-            pdf_path, 
+            pdf_path,
             dpi=optimal_dpi,
             fmt='RGB',
             thread_count=4
         )
-        
+
         for image in images_from_pdf:
             yield image
 

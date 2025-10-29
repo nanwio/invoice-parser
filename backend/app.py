@@ -27,15 +27,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Failed to register HEIF support: {e}")
 
-    # Startup: Eager initialization of PaddleOCR engine (similar to maite-transcripto-gpu)
-    logger.info("Eagerly initializing PaddleOCR engine on startup...")
+    # Startup: Eager initialization of PPStructure engine (used for invoice processing)
+    logger.info("Eagerly initializing PPStructure engine on startup...")
     try:
-        from invoice_processing.ai_services.paddle_ocr.provider import PaddleOCRProvider
+        from invoice_processing.ai_services.paddle_ocr.table_processor import InvoiceTableProcessor
         # This call will trigger the singleton's _initialize() method
-        PaddleOCRProvider.get_engine()
-        logger.success("PaddleOCR engine has been successfully initialized on startup")
+        _ = InvoiceTableProcessor()
+        logger.success("PPStructure engine has been successfully initialized on startup")
     except Exception as e:
-        logger.critical(f"Application startup failed: Could not initialize PaddleOCR engine. Reason: {e}")
+        logger.critical(f"Application startup failed: Could not initialize PPStructure engine. Reason: {e}")
         # The app will run, but OCR endpoints will fail until the issue is resolved.
 
     yield
