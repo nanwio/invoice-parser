@@ -1,45 +1,58 @@
 steps:
   # Build the container image
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/invoice-parser:$COMMIT_SHA', '.']
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-f"
+      - "./Dockerfile"
+      - "-t"
+      - "gcr.io/$PROJECT_ID/invoice-parser:$BUILD_ID"
+      - "."
 
   # Push the container image to Container Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/invoice-parser:$COMMIT_SHA']
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/invoice-parser:$BUILD_ID"]
 
   # Deploy container image to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
     args:
-      - 'run'
-      - 'deploy'
-      - 'invoice-parser-api'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/invoice-parser:$COMMIT_SHA'
-      - '--region'
-      - 'europe-west4'
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated'
-      - '--memory'
-      - '2Gi'
-      - '--cpu'
-      - '2'
-      - '--timeout'
-      - '300s'
-      - '--max-instances'
-      - '10'
-      - '--min-instances'
-      - '0'
-      - '--port'
-      - '8000'
-      - '--update-env-vars'
-      - 'ENVIRONMENT=production,GEMINI_MODEL_NAME=gemini-2.5-flash,REDIS_URL=redis://default:tFufJcQJUsWWzZ9lGUMF22Kv2LeSUk7B@redis-11003.c328.europe-west3-1.gce.redns.redis-cloud.com:11003'
-      - '--update-secrets'
-      - 'GEMINI_API_KEY=GEMINIAPIKEY:latest,SECRET_KEY=SECRETKEY:latest'
+      - "run"
+      - "deploy"
+      - "invoice-parser-api"
+      - "--image"
+      - "gcr.io/$PROJECT_ID/invoice-parser:$BUILD_ID"
+      - "--region"
+      - "europe-west4"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+      - "--memory"
+      - "16Gi"
+      - "--cpu"
+      - "4"
+      - "--timeout"
+      - "300s"
+      - "--max-instances"
+      - "3"
+      - "--min-instances"
+      - "1"
+      - "--gpu"
+      - "1"
+      - "--gpu-type"
+      - "nvidia-l4"
+      - "--no-cpu-throttling"
+      - "--port"
+      - "8000"
+      - "--remove-env-vars"
+      - "REDIS_URL"
+      - "--update-env-vars"
+      - "ENVIRONMENT=production,GEMINI_MODEL_NAME=gemini-2.5-flash-lite"
+      - "--update-secrets"
+      - "GEMINI_API_KEY=GEMINIAPIKEY:latest,JWT_SECRET_KEY=SECRETKEY:latest,REDIS_URL=REDISURL:latest"
 
 images:
-  - 'gcr.io/$PROJECT_ID/invoice-parser:$COMMIT_SHA'
+  - "gcr.io/$PROJECT_ID/invoice-parser:$BUILD_ID"
 
 # Build options to fix service account logging requirement
 options:
