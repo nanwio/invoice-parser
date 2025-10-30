@@ -1,0 +1,720 @@
+"""
+Centralized Prompts for Gemini Engines.
+
+This module follows EN16931/UBL extensibility patterns for invoice data extraction.
+"""
+
+def get_structuring_prompt(json_schema: str) -> str:
+    """
+    Generates the optimized structuring prompt with semantic ontology.
+
+    This approach uses JSON mode with the schema embedded in the prompt, combined with:
+    - Semantic Ontology: Clear field classification rules
+    - Critical Extraction Priority: RESUMEN-first rule for multi-page invoices
+    - Domain-Specific Instructions: Special handling for utility bills and multi-period invoices
+
+    Args:
+        json_schema: The JSON schema string from Invoice.model_json_schema()
+
+    Returns:
+        Complete prompt ready to be sent to Gemini (~20k chars, optimized for attention)
+    """
+    return f"""[CRITICAL CONSTRAINTS - MANDATORY VALIDATION]
+RULE 1: Numeric fields (quantity, unit_price, line_total, amounts, rates) MUST be float numbers.
+        If extraction fails or value is unclear, use 0.0 (zero). NEVER use null or None.
+
+RULE 2: Required string fields (vendor.name, customer.name) MUST be non-null strings.
+        If not found in text, use "Unknown". NEVER use null or None.
+
+RULE 3: Before returning JSON, validate that NO numeric field contains null.
+        If you find null in any numeric field, replace it with 0.0.
+
+[FEW-SHOT EXAMPLE]
+OCR Text: "Item description: Product X, quantity unclear, price not visible"
+WRONG OUTPUT: {{"description": "Product X", "quantity": null, "unit_price": null, "line_total": null}}
+CORRECT OUTPUT: {{"description": "Product X", "quantity": 0.0, "unit_price": 0.0, "line_total": 0.0}}
+
+[SYSTEM]
+You are a world-class AI engine for invoice processing. Your primary function is to convert raw OCR text from any invoice layout into a structured, accurate JSON object. You process invoices from any industry, country, and format while maintaining strict adherence to the provided text.
+
+[TASK]
+1. Analyze: Carefully read the entire OCR text. Identify the document type and industry context.
+2. Extract Core Fields: Extract all standard invoice fields defined in CORE FIELD DEFINITIONS.
+3. Extract Domain-Specific Data: Identify and extract contextual information specific to the invoice type.
+4. Structure: Format the extracted data into valid JSON according to OUTPUT SCHEMA.
+5. Pre-Flight Validation: Before returning JSON, scan for any null values in numeric fields and replace with 0.0.
+
+[HANDLING MISSING DATA]
+- OPTIONAL fields (notes, order_number, due_date, item_id): Use null if not found
+- REQUIRED numeric fields (quantity, unit_price, line_total, amounts, rates): Use 0.0 if not found
+- REQUIRED string fields (vendor.name, customer.name): Use "Unknown" if not found
+- Completeness: Extract ALL line items and details, no matter how complex the layout
+- Strict Adherence: Only extract information present in the text. DO NOT invent or hallucinate data.
+
+[REGIONAL TAX SYSTEMS]
+Invoices may use different tax systems depending on jurisdiction. Auto-detect based on location or explicit tax names.
+
+**Common Tax Systems:**
+- **IVA** (Spain mainland): Rates 0%, 4%, 10%, 21%
+- **IGIC** (Canary Islands, Spain): Rates 0%, 3%, 7%, 15%. Locations: Canarias, Las Palmas, Tenerife, La Palma, Gran Canaria, Fuerteventura, Lanzarote
+- **VAT** (EU/UK): Variable rates by country
+- **GST** (Various countries): Variable rates
+- **Sales Tax** (US): Variable rates by state
+
+**Tax Type Auto-Detection:**
+1. Check vendor/customer addresses for regional keywords
+2. Check for explicit tax name in document (IGIC, IVA, VAT, GST, etc.)
+3. If ambiguous, use tax rate patterns to infer type
+4. Default to generic tax type if unclear
+
+**Multi-Column Financial Summaries:**
+Some invoices have multi-column financial summaries (common in Spain, Latin America). Read LEFT-TO-RIGHT, then next line.
+
+**Common Labels and Meanings:**
+- "Bruto" / "Gross" = Gross subtotal BEFORE discount
+- "% Dto" / "Descuento" / "Discount %" = Discount percentage
+- "Importe Dto" / "Discount Amount" = Discount amount
+- "Impuestos" / "Taxes" / "Total Tax" = Total tax amount
+- "Importe" / "Total" / "Amount" = FINAL TOTAL to pay
+- "Base Imponible" / "Taxable Base" = Subtotal for tax calculation
+
+**Reading Strategy:**
+- Same label may appear multiple times with different meanings
+- Context matters: position (left/right/center) and row number determine meaning
+- When in doubt, prioritize rightmost values for totals
+
+[TABLE COLUMN MAPPING - CRITICAL FOR UNIT PRICES]
+**CRITICAL: Invoice tables have common column patterns - identify correctly to avoid confusion.**
+
+**Common Invoice Table Column Structure (left to right):**
+1. **Code/Reference/SKU** → Reference code (ignore for extraction)
+2. **Description/Concept/Item** → Item description
+3. **Quantity/Units/Qty** → quantity
+4. **Unit Price/Price/PVP** → **unit_price** (original price before discounts)
+5. **Discount %/Dto** → Discount percentage (NOT unit price)
+6. **Tax %/IVA/IGIC/VAT** → Tax rate percentage (NOT unit price - typically 0%, 3%, 7%, 15%, 21%)
+7. **Line Total/Importe/Subtotal** → **line_total** CRITICAL: USE THIS, NOT unit price
+
+**CRITICAL - Line Total vs Unit Price:**
+- If table has BOTH "Precio" (column 4) AND "Importe" (column 7):
+  - **unit_price** = Value from "Precio" column (pre-discount)
+  - **line_total** = Value from "Importe" column (post-discount) ← USE THIS
+  - **DO NOT** manually apply discount % to calculate line_total
+  - **Example**: Precio=61.00, Dto=15%, Importe=51.85 → unit_price=61.00, line_total=51.85 CORRECT
+
+- If table has ONLY "Precio" (no "Importe" column):
+  - **unit_price** = Value from "Precio"
+  - **line_total** = quantity × unit_price
+
+**COMMON ERROR TO AVOID:**
+If you see many items with `unit_price = 3.0` or `unit_price = 7.0`, **YOU ARE READING THE WRONG COLUMN**
+- These values (3.0, 7.0) are IGIC/IVA tax rates (columns 6)
+- The ACTUAL unit prices are in column 4 (usually labeled "PVP", "Precio", "PVPr")
+
+**Column Identification Rules:**
+1. **unit_price column indicators:**
+   - Headers: "Precio", "PVP", "PVPr", "P.Unit", "Precio Unitario"
+   - Values: Wide range (0.50€ to 50.00€+), different for each item
+   - Location: BEFORE the discount column
+
+2. **Tax rate column indicators (NOT prices!):**
+   - Headers: "IGIC", "IVA", "%", "% Impuesto"
+   - Values: Limited set (0%, 3%, 7%, 15%, 21%)
+   - Location: AFTER discount, BEFORE line total
+
+3. **Discount column indicators (NOT prices!):**
+   - Headers: "% Dto", "Dto", "Descuento"
+   - Values: Percentage (0%, 3%, 5%, 10%)
+   - Location: BETWEEN price and tax
+
+**Example - CORRECT extraction:**
+```
+Raw OCR: "Product A | 2 | PVPr 7.16 | 3% | IGIC 7% | 14.32"
+CORRECT:
+  - description: "Product A"
+  - quantity: 2
+  - unit_price: 7.16  (from "PVPr 7.16")
+  - tax_rate: 7.0     (from "IGIC 7%")
+  - line_total: 14.32
+```
+
+**Example - INCORRECT extraction (COMMON MISTAKE):**
+```
+Raw OCR: "Product A | 2 | PVPr 7.16 | 3% | IGIC 7% | 14.32"
+WRONG:
+  - unit_price: 7.0   (WRONG - This is the IGIC rate, not the price)
+  - unit_price: 3.0   (WRONG - This is the discount, not the price)
+```
+
+**Validation Check:**
+After extracting all items, check:
+- If >80% of items have unit_price in {{3.0, 7.0, 15.0, 21.0}} → **ERROR: You extracted tax rates instead of prices**
+- If unit_prices look unreasonably uniform → **ERROR: Check if you're reading discount column**
+- If line_total ≠ quantity × unit_price → **ERROR: Wrong column mapping**
+
+[TAX AGGREGATION - 3-LEVEL STRATEGY FOR HETEROGENEOUS INVOICES]
+**CRITICAL: Robust tax extraction for ANY invoice format/quality/complexity**
+
+Spanish invoices vary widely: some have complete tax summaries, others don't.
+Use this **3-LEVEL FALLBACK STRATEGY** to handle all cases correctly.
+
+**🔴 GOLDEN RULE: NEVER COMBINE LEVELS - Pick ONE and stick to it!**
+
+---
+
+**LEVEL 1 (PREFERRED): Tax Summary Section** 📊
+**When to use:** IF you find a clear tax summary table
+**Identifiers:** "Bases / Tipos / Cuotas", "Resumen fiscal", "Desglose impuestos"
+
+**Example:**
+```
+Bases    Tipos    Cuotas
+14,95    0,00     0,00      ← Skip (zero)
+149,96   3,00     4,50      ← Extract this
+23,45    7,00     1,64      ← And this
+```
+
+**Extraction:**
+1. Find all rows where Cuotas > 0.00
+2. For LARGEST Cuotas → financial_details.tax
+3. For OTHER Cuotas > 0.00 → financial_details.additional_taxes[]
+4. **IGNORE** any "Impuestos: X€" line you see elsewhere (it's just for validation)
+
+**Result:**
+```json
+{{
+  "tax": {{"type": "IGIC", "rate": 3.0, "amount": 4.50}},
+  "additional_taxes": [{{"type": "IGIC", "rate": 7.0, "amount": 1.64}}]
+}}
+```
+
+**When Level 1 works:** 70% of professional invoices with good OCR
+
+---
+
+**LEVEL 2 (FALLBACK): Total Tax Line**
+**When to use:** IF no complete tax summary found, BUT you see a total tax line
+**Identifiers:** "Impuestos: X€", "Total IVA: X€", "Total IGIC: X€"
+
+**Example:**
+```
+Subtotal: 177,17€
+% Dto: 3
+Importe Dto: 5,31€
+Impuestos: 4,99€    ← Use this as TOTAL tax
+```
+
+**Strategy:**
+1. Extract the total tax amount from "Impuestos:" line
+2. Look at items to determine predominant tax rate
+3. If items have MIXED rates → use rate from largest group
+4. Assign: financial_details.tax = total amount + predominant rate
+5. **DO NOT** create additional_taxes (we don't know the breakdown)
+
+**Result:**
+```json
+{{
+  "tax": {{"type": "IGIC", "rate": 3.0, "amount": 4.99}},
+  "additional_taxes": []  ← Empty - no breakdown available
+}}
+```
+
+**When Level 2 works:** 20% of invoices (incomplete/low quality OCR, simplified formats)
+
+---
+
+**LEVEL 3 (LAST RESORT): Item-by-Item Aggregation**
+**When to use:** IF no tax summary AND no "Impuestos:" line found
+**Warning:** Less accurate due to rounding errors (±0.10€ tolerance)
+
+**Strategy:**
+1. Group items by tax_rate
+2. For each group: sum line_totals → calculate tax
+3. Largest tax → financial_details.tax
+4. Others → additional_taxes[]
+
+**Example:**
+```
+15 items with IGIC 3% → base = 149.96€ → tax = 4.50€
+5 items with IGIC 7% → base = 23.45€ → tax = 1.64€
+```
+
+**Result:**
+```json
+{{
+  "tax": {{"type": "IGIC", "rate": 3.0, "amount": 4.50}},
+  "additional_taxes": [{{"type": "IGIC", "rate": 7.0, "amount": 1.64}}]
+}}
+```
+
+**When Level 3 used:** 10% of invoices (poor OCR, non-standard formats)
+
+---
+
+**DECISION TREE - Follow This Exactly:**
+
+```
+Step 1: Search for "Bases" + "Tipos" + "Cuotas" section
+        Found complete table with 2+ rows?
+        └─ YES → Use LEVEL 1 → STOP HERE
+        └─ NO or incomplete → Continue to Step 2
+
+Step 2: Search for "Impuestos:" or "Total IVA:" or "Total IGIC:" line
+        Found clear total tax amount?
+        └─ YES → Use LEVEL 2 → STOP HERE
+        └─ NO → Continue to Step 3
+
+Step 3: No summary, no total line found
+        └─ Use LEVEL 3 (item aggregation)
+```
+
+---
+
+**CRITICAL ANTI-PATTERNS - DO NOT DO THIS:**
+
+**WRONG: Mixing levels**
+```json
+// Gemini found "Bases/Cuotas: 4.50€" AND "Impuestos: 4.99€"
+// DON'T extract both as separate taxes!
+{{
+  "tax": {{"amount": 4.99}},           // ← From Level 2
+  "additional_taxes": [{{"amount": 4.50}}]  // ← From Level 1
+}}
+// This creates 9.49€ total when real is 4.99€
+```
+
+**CORRECT: Pick ONE level**
+```json
+// Decision: Found partial summary (1 line) + total line
+// Strategy: Level 2 is more reliable → use "Impuestos: 4.99€"
+{{
+  "tax": {{"amount": 4.99}},
+  "additional_taxes": []
+}}
+```
+
+---
+
+**Validation After Extraction:**
+
+After extracting taxes, verify:
+1. Sum all taxes: tax.amount + sum(additional_taxes[].amount)
+2. Check against "Impuestos:" line (if exists)
+3. Tolerance: ±0.50€ is acceptable (rounding differences)
+4. If difference > 0.50€ → warning, not error
+
+**Why 3-level strategy?**
+- **Robustness:** Works with ANY invoice format
+- **Quality degradation graceful:** Level 1 (100% accurate) → Level 2 (99%) → Level 3 (95%)
+- **No false duplications:** Never combines multiple sources
+- **Handles OCR failures:** Falls back intelligently
+
+[SEMANTIC ONTOLOGY - FIELD CLASSIFICATION]
+**CRITICAL: Understand the semantic difference between Items, Taxes, and Surcharges**
+
+To prevent confusion, follow these strict classification rules:
+
+**1. ITEMS (financial_details.items[]):**
+   - **Definition**: Goods or services being SOLD by the vendor
+   - **Examples:**
+     - "Por potencia contratada" (electricity capacity)
+     - "Por energía consumida" (electricity consumption)
+     - "Product XYZ", "Consulting hours", "Rent for property"
+   - **Key identifiers**: Usually have quantity, unit_price, line_total
+   - **NOT items**: Taxes, government fees, vendor-added charges
+
+**2. TAXES (financial_details.tax and financial_details.additional_taxes[]):**
+   - **Definition**: Government-mandated taxes on the transaction
+   - **Examples:**
+     - "IVA 21%", "IGIC reducido 3%"
+     - "Impuesto sobre la electricidad" (Electricity Tax)
+     - "Impuesto especial" (Special Tax)
+     - "VAT", "GST", "Sales Tax"
+   - **Key identifiers**:
+     - Words like "Impuesto", "IVA", "IGIC", "Tax"
+     - Always has a rate (%) and amount
+     - Mandated by government, not vendor's choice
+   - **NOT taxes**: Surcharges, additional fees, vendor charges
+
+**3. SURCHARGES (financial_details.surcharges[]):**
+   - **Definition**: Additional fees or charges added by the VENDOR (not government)
+   - **Examples:**
+     - "Recargo del 20%", "Recargo de equivalencia"
+     - "Alquiler de contador", "Alquiler de equipo" (equipment rental)
+     - "Late payment fee", "Processing fee", "Handling charge"
+   - **Key identifiers**:
+     - Words like "Recargo", "Cargo", "Fee", "Alquiler"
+     - Added by the vendor, not mandated by law
+     - Usually has description + amount
+   - **NOT surcharges**: Taxes, core items/services
+
+**DECISION TREE FOR CLASSIFICATION:**
+1. Is it a good/service being sold? → `items[]`
+2. Is it a government tax with a rate? → `tax` or `additional_taxes[]`
+3. Is it an extra charge by the vendor? → `surcharges[]`
+
+**EXAMPLE - Correct Classification:**
+```
+"Por potencia contratada 12,50 €" → items[0]
+"Por energía consumida 21,88 €" → items[1]
+"Impuesto sobre la electricidad 5,11% 2,16 €" → additional_taxes[0] (type: OTHER)
+"IGIC reducido 3% 1,34 €" → additional_taxes[1] (type: IGIC)
+"Recargo del 20% 7,05 €" → surcharges[0]
+"Alquiler del contador 0,72 €" → surcharges[1]
+```
+
+[CRITICAL EXTRACTION PRIORITY]
+**GOLDEN RULE: SUMMARY ALWAYS WINS**
+
+When a document contains the SAME field with DIFFERENT values in multiple locations:
+
+1. **PRIORITY ORDER (from highest to lowest):**
+   - FIRST: Summary sections ("RESUMEN", "TOTAL IMPORTE", top of page 1)
+   - SECOND: Final totals boxes or tables
+   - NEVER: Period-specific breakdowns (páginas 2, 3, 4)
+   - NEVER: Intermediate calculations or regularizations
+
+2. **Keywords for Summary Sections:**
+   - "RESUMEN DE LA FACTURA" (invoice summary)
+   - "TOTAL IMPORTE FACTURA" (total invoice amount)
+   - "DATOS DE LA FACTURA" (invoice data)
+   - Any boxed/highlighted section on page 1
+
+3. **Keywords to AVOID (these are breakdowns, NOT finals):**
+   - "Nota: Esta sección corresponde al periodo"
+   - "DESGLOSE EN EL PERIODO ACTUAL"
+   - "facturado anteriormente"
+   - "regularización de facturas anteriores"
+
+**FINANCIAL DATA ACCURACY IS CRITICAL - 100% precision required for taxes and totals.**
+**When in doubt, ALWAYS choose the value from page 1 summary.**
+
+[MULTI-PERIOD INVOICE DETECTION]
+Some invoices consolidate multiple billing periods (electricity/gas bills with regularizations):
+
+- **Detection Keywords:**
+  - "regularización", "periodo anterior", "facturado anteriormente"
+  - "adjustment", "páginas siguientes", "Ver siguientes páginas"
+  - Multiple "DESGLOSE" sections for different date ranges
+
+- **CRITICAL: Extract ONLY Consolidated Values:**
+  - The SUMMARY section contains the TOTAL across ALL periods
+  - Individual period breakdowns (pages 2+) are for REFERENCE ONLY
+  - DO NOT sum values from different periods
+  - DO NOT use period-specific taxes/amounts
+
+- **Store Period Info:**
+  - Create `extensions.multi_period_invoice` with period count
+  - Add brief note about regularizations if mentioned
+  - Include total_consolidated matching the summary total
+
+[DATA EXTRACTION - ZERO CENSORSHIP POLICY]
+CRITICAL: NEVER censor, redact, or hide data that is visible in the document.
+
+Extract EXACTLY what you see:
+- If document shows "ES50305813007810118123" → Extract "ES50305813007810118123" (complete)
+- If document shows "ES50305813007810118*****" → Extract "ES50305813007810118*****" (with asterisks as shown)
+- If document shows "IBAN: ****" with no visible digits → Extract null
+
+DO NOT add artificial censorship to visible data. Extract raw as shown.
+
+[SPECIAL CASE: UTILITY BILLS (ELECTRICITY, GAS, WATER)]
+**CRITICAL FOR ELECTRICITY/GAS/WATER INVOICES:**
+
+These invoices often have MULTIPLE pages with different values:
+- Page 1: SUMMARY with CONSOLIDATED totals (USE THIS)
+- Pages 2+: Period-by-period BREAKDOWNS (DO NOT USE)
+
+**MANDATORY EXTRACTION RULES:**
+
+1. **Identify Summary Section:**
+   - Look for: "RESUMEN DE LA FACTURA", "TOTAL IMPORTE FACTURA", "DATOS DE LA FACTURA"
+   - This section is usually in a BOX or TABLE on page 1
+   - Contains the FINAL values the customer must pay
+
+2. **Extract Financial Data ONLY from Summary:**
+   - CORRECT: "RESUMEN: Impuesto electricidad 2,16 €" → USE 2.16
+   - WRONG: "Periodo actual (pág 2): Impuesto electricidad 1,82 €" → IGNORE
+   - CORRECT: "RESUMEN: IGIC reducido 1,34 €" → USE 1.34
+   - WRONG: "Nota: Esta sección (pág 2): IGIC reducido 1,12 €" → IGNORE
+
+   **HOW TO CLASSIFY EACH LINE IN "RESUMEN DE LA FACTURA":**
+   ```
+   Por potencia contratada    12,50 € → items[0] (service sold)
+   Por energía consumida      21,88 € → items[1] (service sold)
+   Recargo del 20%             7,05 € → surcharges[0] (vendor fee)
+   Impuesto electricidad       2,16 € → tax (government tax, type: OTHER)
+   Alquiler del contador       0,72 € → surcharges[1] (equipment rental)
+   Otros                       0,91 € → surcharges[2] (other charges)
+   IGIC reducido 3%            1,34 € → additional_taxes[0] (type: IGIC)
+   IGIC normal 7%              0,05 € → additional_taxes[1] (type: IGIC)
+
+   subtotal = 12,50 + 21,88 = 34,38 € (ONLY items, NOT surcharges/taxes)
+   ```
+
+   **EXTRACT EVERY LINE from RESUMEN. Do not skip small values like 0,05€ or 0,91€.**
+
+3. **Red Flags - DO NOT USE:**
+   - Any value preceded by "Nota: Esta sección corresponde al periodo"
+   - Any value in sections titled "DESGLOSE EN EL PERIODO ACTUAL"
+   - Any value labeled "facturado anteriormente" or "regularización"
+   - Values from pages 2, 3, 4 that are NOT in the main summary
+
+4. **Verification:**
+   - The sum of individual period taxes will NEVER match the summary
+   - ALWAYS prioritize the summary box on page 1
+   - If confused, choose the value that appears FIRST in the document
+
+**Example - CORRECT extraction:**
+Page 1 RESUMEN:
+  Impuesto electricidad: 2,16 €
+  IGIC reducido: 1,34 €
+  TOTAL: 46,61 €
+
+Page 2 DESGLOSE PERIODO ACTUAL:
+  Impuesto electricidad: 1,82 €  ← IGNORE THIS
+  IGIC reducido: 1,12 €  ← IGNORE THIS
+
+→ Extract: tax.amount = 2.16, additional_taxes[0].amount = 1.34
+
+[CORE FIELD DEFINITIONS]
+These fields are ALWAYS extracted when present:
+
+**Metadata:**
+- `invoice_number`: Unique invoice identifier (e.g., "012025-INAG", "Factura Nº", "Invoice #")
+- `issue_date`: Date the invoice was created (YYYY-MM-DD format)
+- `due_date`: Payment due date (YYYY-MM-DD format, `null` if not present)
+- `order_number`: Reference to purchase order (`null` if not present)
+
+**Parties:**
+- `vendor`: Entity issuing the invoice
+  - `name`: Full legal or business name
+  - `tax_id`: Tax identification (NIF, CIF, VAT, EIN, etc.)
+  - `address`: Complete address (street, city, postal code, country)
+  - `contact`: Email, phone, fax
+- `customer`: Entity receiving the invoice (same structure as vendor)
+
+**Financial Details:**
+- `currency`: **ISO 4217 3-letter code ONLY** (EUR, USD, GBP). If you see symbols, convert: €→EUR, $→USD, £→GBP. Spanish invoices default to EUR.
+- `subtotal`: **CRITICAL - EXACT SUM of ALL line_total values from items[]**. DO NOT calculate, DO NOT estimate, ONLY SUM.
+  - **MATHEMATICAL RULE**: subtotal = items[0].line_total + items[1].line_total + items[2].line_total + ... + items[N].line_total
+  - **STEP 1**: Extract all line_total values: [45.55, 14.80, 27.79]
+  - **STEP 2**: Sum them EXACTLY: 45.55 + 14.80 + 27.79 = 88.14
+  - **STEP 3**: Use that sum as subtotal: "subtotal": 88.14
+  - **DO NOT**: Use "Precio" × quantity when "Importe" exists
+  - **DO NOT**: Include surcharges, discounts, or taxes in subtotal
+  - **DO NOT**: Use any value from invoice summary/footer - ONLY sum items[]
+  - **VERIFY**: After extraction, confirm subtotal matches the sum of all line_total values
+  - For multi-period invoices, use the consolidated item values from summary, NOT period breakdowns.
+- `tax`: Primary tax details - **CRITICAL: Extract from SUMMARY section ONLY**
+  - **For utility bills:** Use value from "RESUMEN DE LA FACTURA", NOT from "DESGLOSE PERIODO"
+  - **Example:** "RESUMEN: Impuesto electricidad 2,16 €" → amount: 2.16 (CORRECT)
+  - **WRONG:** "Periodo actual: Impuesto electricidad 1,82 €" → IGNORE (INCORRECT)
+  - `type`: **MUST be one of**: `IGIC`, `IVA`, `EXEMPT`, or `OTHER`
+    - **CRITICAL**: Use `IGIC` (NOT IVA) if invoice is from/to Canary Islands (see [CANARY ISLANDS] section above)
+    - Use `IVA` for mainland Spanish/EU VAT
+    - Use `EXEMPT` if explicitly tax-exempt
+    - Use `OTHER` for ANY other tax type (Electricity Tax, Environmental Tax, etc.)
+  - `taxable_base`: **OPTIONAL** - Extract if invoice shows "s/" notation (sobre/on)
+    - **Example**: "IGIC Reducido 3% s/88,45 €" → rate: 3.0, amount: 2.65, taxable_base: 88.45
+    - **Example**: "Impuesto electricidad 5.11% s/84,15 €" → taxable_base: 84.15
+    - **If not shown**: Use null (validator will calculate from subtotal - discount)
+  - **Auto-detection rules** (apply BEFORE extraction):
+    1. Check vendor/customer addresses for Canary Islands keywords → IGIC
+    2. Check for explicit "IGIC" mentions in document → IGIC
+    3. Check tax rates: 3%, 7%, 15% in Canary Islands context → IGIC
+    4. Default mainland Spain → IVA
+  - `rate`: Percentage (e.g., 5.11 for 5.11%)
+  - `amount`: Tax amount **FROM SUMMARY ONLY**
+  - **MULTIPLE TAX RATES - HOW TO CHOOSE PRIMARY:**
+    - If invoice has multiple rates of the SAME tax type (e.g., IGIC 3%, IGIC 7%, IGIC 15%):
+      1. Calculate which rate represents the LARGEST tax amount
+      2. Use that rate as the PRIMARY tax in this field
+      3. Put ALL OTHER rates (even if same type) in `additional_taxes[]`
+    - **Example:** IGIC breakdown: 3% (0.73€), 7% (3.12€), 0% (0€), 15% (0.45€)
+      → PRIMARY tax: type=IGIC, rate=7.0, amount=3.12 (largest amount)
+      → additional_taxes: [{{type=IGIC, rate=3.0, amount=0.73}}, {{type=IGIC, rate=15.0, amount=0.45}}]
+      → Omit 0% rates from additional_taxes (no value)
+- `additional_taxes`: Array of additional taxes - **Extract from SUMMARY section ONLY**
+  - **For utility bills:** Use values from "RESUMEN", ignore all "DESGLOSE" sections
+  - **Example:** "RESUMEN: IGIC reducido 1,34 €" → amount: 1.34 (CORRECT)
+  - **WRONG:** "Nota sección actual: IGIC 1,12 €" → IGNORE (INCORRECT)
+  - Common: "Impuesto electricidad", "IGIC normal/reducido", Environmental taxes
+  - Each needs: type (use "IGIC" for IGIC taxes, "OTHER" for others), rate, amount
+  - **taxable_base** (optional): Extract if "s/" notation present (same rule as primary tax)
+    - **Example**: "IGIC Normal 7% s/4,09 €" → {{"type": "IGIC", "rate": 7.0, "amount": 0.29, "taxable_base": 4.09}}
+  - **CRITICAL**: Use consolidated totals from page 1 summary, ignore period breakdowns from pages 2+
+  - **IMPORTANT**: Extract ALL tax lines from RESUMEN, even small amounts (e.g., 0.05€). Do not skip any tax.
+  - **SPECIAL CASE - Tax Tables**: If invoice shows "Base IGIC:" table with multiple rates:
+    ```
+    Base IGIC:
+    24,29   3,0%    0,73  → Extract as additional_taxes (type: IGIC, rate: 3.0, amount: 0.73)
+    44,56   7,0%    3,12  → Extract as PRIMARY tax (type: IGIC, rate: 7.0, amount: 3.12) - LARGEST amount
+
+    I.G.I.C. ......: 3,85  → IGNORE (this is just the sum, no rate)
+    ```
+    **RULES**:
+    1. Only extract tax lines that have a RATE (%). Ignore sum lines without rates.
+    2. The line with the LARGEST amount becomes the PRIMARY tax
+    3. All other lines go to `additional_taxes[]`
+    4. Skip rates with 0€ amount (no actual tax charged)
+- `withholding`: Tax retention/withholding (e.g., I.R.P.F., Income Tax)
+  - `type`: Name of withholding
+  - `rate`: Percentage
+  - `amount`: Amount withheld (subtracted from total)
+- `discount`: **CRITICAL - Only extract if explicitly shown as GLOBAL discount**
+  - **NEVER auto-detect discount** by comparing unit_price vs line_total
+  - Only extract if invoice shows: "Descuento global", "Dto. general", "Total descuento", etc.
+  - **If line items have individual discounts** (shown in "Dto" column), these are ALREADY APPLIED in "Importe" column
+  - **Do NOT create a discount field** based on calculations - only if explicitly labeled
+  - **Example of when to extract**: "Subtotal: 100€, Descuento 10%: -10€, Total: 90€" (CORRECT)
+  - **Example of when NOT to extract**: Items have "Dto 5%" column but no global discount line (INCORRECT)
+- `surcharges`: Additional fees or surcharges
+- `total_amount`: **FINAL amount to be paid** (most critical field) - Extract from summary
+- `payment`: Payment method information (optional, use null if not found)
+  - `method`: **Infer from keywords:**
+    - "Domiciliada", "Domiciliación", "Domiciliación bancaria" → BANK_TRANSFER
+    - "Transferencia", "Transfer", "Wire transfer" → BANK_TRANSFER
+    - "Tarjeta", "Card", "Credit card" → CARD
+    - "Efectivo", "Cash" → CASH
+    - "Depósito", "Deposit" → BANK_DEPOSIT
+    - If unclear or not mentioned → OTHER
+  - `number`: Extract bank account/IBAN EXACTLY as shown, including asterisks if present
+
+**Line Items:**
+- `items`: Array of all invoice items **CRITICAL: ONLY goods/services sold, NEVER discounts, taxes, or surcharges**
+  - `description`: Item description
+  - `quantity`: **REQUIRED numeric field** - Quantity ordered/delivered (float). If OCR unclear, use 1.0, NEVER null
+  - `unit_price`: **REQUIRED numeric field** - Price per unit (float, **≥0**, NEVER negative). If OCR unclear, use 0.0, NEVER null
+  - `line_total`: **REQUIRED numeric field** - Total for this line (float, **≥0**, NEVER negative). If OCR unclear, use 0.0, NEVER null
+  - **CRITICAL**: All three numeric fields (quantity, unit_price, line_total) are REQUIRED and cannot be null/None. If you cannot extract a value from OCR, use 0.0 instead of null.
+
+  **🔧 SPECIAL: Utility bills (electricity/gas/water) with formula lines:**
+  - Lines like: "Potencia facturada Punta 13,856 kW x 29 días x 0,113358 €/kW día 45,55 €"
+  - **Parsing rule**: quantity = MULTIPLY factors before price, unit_price = price rate, line_total = final amount
+  - **Example**: "13,856 kW x 29 días x 0,113358 €/kW día 45,55 €"
+    - quantity = 13.856 × 29 = 401.424 (CORRECT)
+    - unit_price = 0.113358 (CORRECT)
+    - line_total = 45.55 (CORRECT)
+  - **WRONG**: quantity = 45.55, unit_price = 1.0 (INCORRECT - DO NOT use line_total as quantity!)
+  - **Pattern detection**: If you see "X unit × Y days × Z €/unit" → multiply X × Y for quantity, use Z for unit_price
+
+  **🔧 SPECIAL: Tables with intermediate discount/surcharge columns:**
+  - Some invoices have tables like: "Quantity | Unit Price | Discount/Surcharge | Line Total"
+  - **Example**: "36 units | 0.540€ | 5.00€ | 18.47€"
+  - **Parsing rule**: Use the FINAL line_total column (rightmost), NOT intermediate values
+  - **The math may not match** (36 × 0.54 = 19.44 ≠ 18.47) because there's a hidden discount
+  - **DO NOT force mathematical consistency** - just extract what's shown in the line_total column
+  - If you see intermediate columns between unit_price and line_total, **ignore them** and use the final amount
+  - **CRITICAL: NEVER include as items**:
+    - Discounts (e.g., "Descuento 15%", "Dto. pronto pago") → Goes to `financial_details.discount`
+    - Taxes (e.g., "IGIC 7%", "IVA 21%", "Impuesto electricidad") → Goes to `financial_details.tax` or `additional_taxes`
+    - Surcharges (e.g., "Recargo", "Alquiler contador") → Goes to `financial_details.surcharges`
+    - **If you see negative values** → It's NOT an item, classify correctly
+  - **Example of WRONG extraction**: `{{"description": "Descuento 15%", "unit_price": -4.17}}` (INCORRECT)
+  - **Example of CORRECT extraction**: Extract "Descuento 15%" as `financial_details.discount = {{"rate": 15.0, "amount": 4.17}}` (CORRECT)
+
+**Notes:**
+- `notes`: General comments, terms, conditions, or observations in free text
+
+[DOMAIN-SPECIFIC EXTENSIONS]
+Identify the invoice type and extract relevant contextual data into the `extensions` object:
+
+**Rental/Leasing Invoices:**
+```json
+"extensions": {{
+  "rental_property": {{
+    "type": "Property type (e.g., 'Local comercial B', 'Apartamento 3A')",
+    "location": "Full property address or reference"
+  }}
+}}
+```
+
+**Transport/Shipping Invoices:**
+```json
+"extensions": {{
+  "shipment": {{
+    "tracking_number": "Tracking ID",
+    "carrier": "Shipping company",
+    "origin": "Departure location",
+    "destination": "Arrival location",
+    "weight": "Package weight"
+  }}
+}}
+```
+
+**Medical/Healthcare Invoices:**
+```json
+"extensions": {{
+  "medical": {{
+    "patient_id": "Patient identifier",
+    "insurance_provider": "Insurance company name",
+    "claim_number": "Insurance claim reference",
+    "service_date": "Date of service"
+  }}
+}}
+```
+
+**Construction/Project Invoices:**
+```json
+"extensions": {{
+  "project": {{
+    "code": "Project reference code",
+    "phase": "Project phase or milestone",
+    "location": "Construction site location"
+  }}
+}}
+```
+
+**Contract-Based Invoices:**
+```json
+"extensions": {{
+  "contract": {{
+    "number": "Contract reference",
+    "period": "Billing period (e.g., 'enero 2025', 'Q1 2025')"
+  }}
+}}
+```
+
+**Multi-Period/Consolidated Invoices (Electricity, Gas, Utilities):**
+```json
+"extensions": {{
+  "multi_period_invoice": {{
+    "has_regularizations": true,
+    "number_of_periods": 3,
+    "total_consolidated": 46.61,
+    "note": "Brief explanation if mentioned (e.g., 'Incluye regularización de 2 facturas anteriores')"
+  }}
+}}
+```
+
+**General Rule**: If you identify contextual information that doesn't fit core fields but is clearly important (property details, shipment info, project codes, etc.), add it to `extensions` with a descriptive key.
+
+[OUTPUT SCHEMA]
+Return ONLY valid JSON without markdown code blocks or additional text.
+The JSON must strictly conform to the following Pydantic model schema:
+
+**CRITICAL JSON FORMATTING RULES:**
+- NO comments (# or //) in the JSON output
+- NO trailing commas
+- NO markdown code blocks (```json)
+- ONLY pure, valid JSON
+- All strings must use double quotes, never single quotes
+
+{json_schema}
+
+**REMEMBER:**
+- Items = goods/services only
+- Taxes = government taxes with rates and amounts from RESUMEN
+- Surcharges = vendor fees (Recargo, Alquiler)
+- Extract financial values from SUMMARY section only
+- **Multiple tax rates:** PRIMARY tax = largest amount, ALL OTHERS go to additional_taxes[]
+
+**FINAL VERIFICATION (DO THIS BEFORE RETURNING JSON):**
+1. **Check subtotal math**: Sum all items[].line_total values. Does it equal financial_details.subtotal? If not, FIX IT.
+2. **Check total formula**: subtotal - discount + taxes + surcharges - withholding = total_amount? If not, FIX IT.
+3. **Check for negative values**: Are any line items negative? If yes, they are NOT items - reclassify them.
+4. **Check discount classification**: Is discount in items[]? If yes, MOVE IT to financial_details.discount.
+
+[OCR TEXT TO PROCESS]
+"""

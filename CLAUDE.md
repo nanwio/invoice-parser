@@ -17,11 +17,9 @@ Execute all commands from the **project root directory** (`/invoice-parser`).
 ### Local Development
 ```bash
 # Install/update dependencies
-cd backend
 poetry install
 
 # Run the application locally with auto-reload
-cd backend
 poetry run python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 
 # Generate an authentication token for testing
@@ -29,7 +27,7 @@ poetry run python generate_token.py
 ```
 
 ### Environment Setup
-- Create a `.env` file inside the `backend/` directory.
+- Create a `.env` file in the project root directory.
 - Required variables:
   - `GEMINI_API_KEY`: Your API key for Google Gemini.
   - `REDIS_URL`: The full connection string for your Redis instance (e.g., `redis://:password@host:port/0`).
@@ -85,27 +83,89 @@ POST /api/v1/invoice/parse?mode=vision
 
 **Redis Caching:** Identical PDFs (by hash) return cached results in <50ms, bypassing all processing.
 
-### Key Modules (`backend/invoice_processing/`)
+### Project Structure (Clean Code Architecture)
 
-#### `ai_services/`
-- **`paddle_ocr/`**: Self-contained package for OCR operations (OCR mode only).
-  - `processor.py`: Main OCR orchestrator with lazy initialization
-  - `config.py`: Optimized PaddleOCR configuration (MKLDNN enabled for Linux)
-  - `image_handler.py`: PDF-to-image conversion and preprocessing
-  - `ocr_executor.py`: Parallelized, asynchronous OCR execution
-  - **Models:** Pre-cached during Docker build for instant startup
+```
+/invoice-parser/
+├── src/                           # All source code (refactored clean architecture)
+│   ├── api/                       # FastAPI routes and endpoints
+│   │   ├── endpoints/             # API endpoint handlers
+│   │   │   └── upload_and_parse.py  # Main invoice parsing endpoint
+│   │   ├── security/              # JWT authentication logic
+│   │   └── health.py              # Health check endpoint
+│   │
+│   ├── core/                      # Core business logic orchestration
+│   │   └── pipeline/
+│   │       └── invoice_processor.py  # Main pipeline orchestrator
+│   │
+│   ├── domain/                    # Domain models and business logic
+│   │   ├── models/                # Pydantic data models (clean separation)
+│   │   │   ├── party.py           # Party, Address, Contact models
+│   │   │   ├── financial.py       # Tax, Payment, FinancialDetails models
+│   │   │   ├── item.py            # LineItem, Metadata models
+│   │   │   └── invoice.py         # Main Invoice model
+│   │   ├── corrections/           # Invoice correction strategies
+│   │   │   ├── correction_pipeline.py  # Main correction orchestrator
+│   │   │   └── strategies/        # Specific correction strategies (future)
+│   │   └── validation/            # Validation logic
+│   │       ├── invoice_validator.py   # Main validator
+│   │       └── rules/             # Validation rules (future)
+│   │
+│   ├── services/                  # External service integrations
+│   │   ├── ai/                    # AI service providers
+│   │   │   └── gemini/
+│   │   │       ├── text_structurer.py  # Gemini text processing
+│   │   │       ├── gemini_client.py    # Gemini API client
+│   │   │       └── prompts.py          # Prompt templates
+│   │   ├── ocr/                   # OCR service providers
+│   │   │   └── paddle/
+│   │   │       ├── processor.py         # Main OCR processor
+│   │   │       ├── provider.py          # Singleton engine provider
+│   │   │       ├── image_handler.py     # PDF conversion & optimization
+│   │   │       ├── image_preprocessor.py  # Image enhancement
+│   │   │       ├── image_quality_detector.py  # Quality analysis
+│   │   │       ├── table_processor.py   # Table extraction
+│   │   │       └── config.py            # PaddleOCR configuration
+│   │   └── cache/                 # Caching services
+│   │       └── redis_repository.py  # Redis cache implementation
+│   │
+│   ├── config/                    # Application configuration
+│   │   └── settings.py            # Environment settings
+│   │
+│   └── utils/                     # Utility functions
+│       └── document_utils.py      # Document hashing, etc.
+│
+├── app.py                         # FastAPI application entry point
+├── pyproject.toml                 # Poetry dependencies
+├── Dockerfile                     # GPU-enabled Docker image
+└── README.md                      # Project documentation
+```
 
-- **`gemini_processor.py`**: Dual-mode Gemini API communication
+### Key Modules
+
+#### `src/core/pipeline/`
+- `invoice_processor.py`: Main pipeline orchestrator. Routes requests to OCR or Vision mode based on `?mode=` parameter.
+
+#### `src/services/ai/gemini/`
+- `text_structurer.py`: Dual-mode Gemini API communication
   - `structure_invoice_data_from_text()`: OCR mode - processes extracted text
   - `structure_invoice_data_from_images()`: Vision mode - processes PDF images
-  - `gemini/prompts.py`: Centralized prompt with multi-tax handling
+- `prompts.py`: Centralized prompt with multi-tax handling and state-of-the-art prompting techniques
 
-#### `parsing/invoice_pipeline.py`
-Main pipeline orchestrator. Routes requests to OCR or Vision mode based on `?mode=` parameter.
+#### `src/services/ocr/paddle/`
+- Self-contained package for OCR operations (OCR mode only)
+- `processor.py`: Main OCR orchestrator with lazy initialization
+- `provider.py`: Singleton pattern for PPStructure engine management
+- `image_handler.py`: PDF-to-image conversion with smart preprocessing
+- `table_processor.py`: Table extraction using PPStructure
 
-#### Other Key Modules
-- **`caching/`**: Contains the Redis cache logic.
-- **`classification/`**: (Currently Unused) Contains logic for document classification, which can be re-integrated if needed.
-- **`models/`**: Defines the Pydantic data structures for invoices.
-- **`validation/`**: Contains the logic for validating the final extracted data.
-- **`configuration/`**: Manages application settings via `dotenv` and the `.env` file.
+#### `src/domain/models/`
+- Clean separation of Pydantic models (all files <70 lines)
+- `invoice.py`: Main Invoice model following EN16931/UBL pattern
+- `party.py`, `financial.py`, `item.py`: Modular model definitions
+
+#### `src/services/cache/`
+- `redis_repository.py`: Redis caching with repository pattern
+
+#### `src/config/`
+- `settings.py`: Centralized application settings
