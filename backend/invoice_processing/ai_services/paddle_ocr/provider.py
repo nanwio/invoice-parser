@@ -56,17 +56,16 @@ class PaddleOCRProvider:
             else:
                 logger.info("❌ No GPU detected - running in CPU mode")
 
-            # Initialize PPStructure with TensorRT acceleration
+            # Initialize PPStructure with auto-detected GPU
             cls._engine = PPStructure(
                 show_log=False,
                 table=True,              # Enable table recognition (critical for invoices)
                 ocr=True,                # Enable OCR within tables
                 layout=True,             # Enable layout analysis
                 image_orientation=True,  # Enable rotation detection
+                use_angle_cls=False,     # OPTIMIZATION: Skip angle classification (saves 20-30% time)
                 lang='en',               # Must be 'en' or 'ch' (layout model requirement)
                 use_gpu=cls._is_gpu_available,  # Auto-detect GPU
-                use_tensorrt=cls._is_gpu_available,  # TensorRT acceleration (10-20x faster)
-                precision='fp16' if cls._is_gpu_available else 'fp32',  # FP16 for speed on GPU
                 enable_mkldnn=False,     # Disabled for stability (not needed on GPU)
                 cpu_threads=1,           # Single thread for stability
             )

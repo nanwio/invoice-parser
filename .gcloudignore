@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Local development
+.env
+.env.local
+backend/.env
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Facturas de prueba (no incluir en build)
+facturas/
+
+# Scripts de desarrollo
+deploy-cpu.sh
+local-test.sh
+
+# MacOS
+.DS_Store
+
+# Node modules (si existen)
+node_modules/

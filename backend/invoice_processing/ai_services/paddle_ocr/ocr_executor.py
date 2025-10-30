@@ -16,7 +16,7 @@ class OcrExecutor:
     def __init__(self, ocr_engine: PaddleOCR, engine_lock: Lock, image_handler: ImageHandler):
         """
         Initialize the OCR executor.
-        
+
         Args:
             ocr_engine: An initialized PaddleOCR engine instance.
             engine_lock: A thread lock to serialize access to the engine.
@@ -25,7 +25,10 @@ class OcrExecutor:
         self.ocr_engine = ocr_engine
         self.engine_lock = engine_lock
         self.image_handler = image_handler
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        # OPTIMIZATION: Reduced from 4 to 1 worker
+        # GPU operations are serialized by engine_lock anyway,
+        # so multiple workers just add context switching overhead
+        self.executor = ThreadPoolExecutor(max_workers=1)
 
     async def _run_ocr_on_image_async(self, page_index: int, image: Image.Image) -> Tuple[int, List[str]]:
         """
