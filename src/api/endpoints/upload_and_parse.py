@@ -11,9 +11,9 @@ from typing import Dict, Any
 from uuid import uuid4
 from loguru import logger
 
-from api.security.jwt_auth import get_current_user
-from src.services.cache.redis_cache import invoice_cache
-from src.parsing.invoice_pipeline import InvoiceProcessor
+from src.api.security.jwt_auth import get_current_user
+from src.cache.redis_cache import invoice_cache
+from src.core.pipeline.invoice_processor import InvoiceProcessor
 from src.domain.models import InvoiceParseResponse
 from src.utils.document_utils import document_utils
 
