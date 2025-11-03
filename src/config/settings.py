@@ -30,14 +30,14 @@ class AIModelSettings(BaseSettings):
 class DatabaseSettings(BaseSettings):
     """Settings for database and caching."""
 
-    REDIS_URL: str = os.getenv("REDIS_URL")
+    REDIS_URL: Optional[str] = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     CACHE_ENABLED: bool = True
 
 
 class SecuritySettings(BaseSettings):
     """Settings for security features."""
 
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY")
+    JWT_SECRET_KEY: str = os.getenv("SECRET_KEY") or os.getenv("JWT_SECRET_KEY", "dev-secret-change-in-production")
 
 
 class AppSettings(BaseSettings):

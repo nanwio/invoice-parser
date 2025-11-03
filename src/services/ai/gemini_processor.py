@@ -9,7 +9,7 @@ from src.services.ai.gemini.prompts import get_structuring_prompt
 from src.services.ai.gemini.utils.json_cleaner import JSONCleaner
 from src.services.ai.gemini.utils.json_repairer import JSONRepairer
 from src.services.ai.gemini.utils.text_truncator import TextTruncator
-from src.config.app_settings import app_settings
+from src.config.settings import app_settings
 
 
 class GeminiInvoiceProcessor:

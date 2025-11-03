@@ -7,7 +7,7 @@ from fastapi import Security, HTTPException, status
 from fastapi_jwt import JwtAuthorizationCredentials, JwtAccessBearer
 from loguru import logger
 
-from src.config.app_settings import app_settings
+from src.config.settings import app_settings
 
 
 class JWTAuthenticator:
