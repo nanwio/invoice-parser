@@ -50,6 +50,9 @@ class GeminiInvoiceProcessor:
                 request_options={"timeout": 120}
             )
 
+            # DEBUG: Log Gemini response
+            logger.info(f"Gemini raw response ({len(response.text)} chars): {response.text[:1000]}...")
+
             json_text = self._extract_json(response.text)
             invoice_dict = self._parse_json_with_repair(json_text)
             invoice = Invoice.model_validate(invoice_dict)
