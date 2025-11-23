@@ -49,7 +49,7 @@ steps:
       - "--update-env-vars"
       - "ENVIRONMENT=production,GEMINI_MODEL_NAME=gemini-2.5-flash-lite"
       - "--update-secrets"
-      - "GEMINI_API_KEY=GEMINIAPIKEY:latest,JWT_SECRET_KEY=SECRETKEY:latest,REDIS_URL=REDISURL:latest"
+      - "GEMINI_API_KEY=GEMINI_API_KEY:latest,JWT_SECRET_KEY=SECRETKEY:latest,REDIS_URL=REDIS_URL:latest"
 
 images:
   - "gcr.io/$PROJECT_ID/invoice-parser:$BUILD_ID"
