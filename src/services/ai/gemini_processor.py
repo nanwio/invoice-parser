@@ -5,7 +5,7 @@ import google.generativeai as genai
 import json
 
 from src.domain.models import Invoice
-from src.services.ai.gemini.prompts import get_structuring_prompt
+from src.services.ai.gemini.prompts_v3 import get_structuring_prompt
 from src.services.ai.gemini.utils.json_cleaner import JSONCleaner
 from src.services.ai.gemini.utils.json_repairer import JSONRepairer
 from src.services.ai.gemini.utils.text_truncator import TextTruncator

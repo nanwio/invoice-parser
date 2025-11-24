@@ -6,7 +6,7 @@ from PIL import Image
 import numpy as np
 
 from src.services.ocr.paddle.provider import PaddleOCRProvider
-from .html_converter import HTMLTableConverter
+from .toon_converter import TOONConverter, TOONTableAnalyzer
 from .text_extractor import RegionTextExtractor
 
 
@@ -96,9 +96,10 @@ class InvoiceTableProcessor:
 
                 if html_content:
                     all_html.append(html_content)
-                    text_repr = HTMLTableConverter.convert(html_content, page_num, table_count)
-                    all_text_parts.append(text_repr)
-                    logger.debug(f"Page {page_num}: Extracted table {table_count}")
+                    # Convert to TOON format
+                    toon_repr = TOONConverter.convert_html_table(html_content, page_num, table_count)
+                    all_text_parts.append(toon_repr)
+                    logger.debug(f"Page {page_num}: Extracted table {table_count} (TOON format)")
 
             elif region_type == 'figure':
                 logger.debug(f"Page {page_num}: Skipping figure region")

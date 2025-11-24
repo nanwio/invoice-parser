@@ -14,6 +14,7 @@ from src.domain.models import Invoice
 from src.services.ai.gemini_processor import GeminiInvoiceProcessor
 from src.services.ocr.paddle import create_paddle_processor
 from src.domain.validation.orchestrator import InvoiceValidator
+from src.domain.validation.validators.mathematical_validator import MathematicalValidator
 from src.domain.corrections.orchestrator import CorrectionOrchestrator
 from src.utils.document_utils import document_utils
 from src.core.pipeline.utils.helpers import format_ocr_results_for_llm, cleanup_temp_file
@@ -115,13 +116,27 @@ class InvoiceProcessor:
                 }
 
             # Step 3: Apply financial corrections
-            logger.info("Step 3/4: Applying intelligent financial corrections")
+            logger.info("Step 3/5: Applying intelligent financial corrections")
             correction_start = time.perf_counter()
             invoice = CorrectionOrchestrator.apply_all_corrections(invoice)
             correction_time = time.perf_counter() - correction_start
 
-            # Step 4: Validation
-            logger.info("Step 4/4: Validating structured data")
+            # Step 4: Mathematical validation (with auto-correction)
+            logger.info("Step 4/5: Applying mathematical validation")
+            math_validation_start = time.perf_counter()
+            math_validation_result = MathematicalValidator.validate(invoice, auto_correct=True)
+            math_validation_time = time.perf_counter() - math_validation_start
+
+            if not math_validation_result.is_valid:
+                logger.warning(f"Mathematical validation found {len(math_validation_result.issues)} issues")
+                for issue in math_validation_result.issues:
+                    logger.warning(f"  [{issue.severity}] {issue.field}: {issue.message}")
+
+            if math_validation_result.corrections_applied > 0:
+                logger.info(f"Applied {math_validation_result.corrections_applied} automatic corrections")
+
+            # Step 5: Semantic validation
+            logger.info("Step 5/5: Validating structured data")
             validation_start = time.perf_counter()
             validation_result = self.validator.validate_invoice(invoice)
             validation_time = time.perf_counter() - validation_start
@@ -135,12 +150,13 @@ class InvoiceProcessor:
         logger.info(
             f"Invoice processed in {total_time:.2f}s "
             f"(OCR={ocr_time:.2f}s, structure={structuring_time:.2f}s, "
-            f"correction={correction_time:.2f}s, validation={validation_time:.2f}s)"
+            f"correction={correction_time:.2f}s, math_val={math_validation_time:.2f}s, validation={validation_time:.2f}s)"
         )
 
         processing_results = {
             **gemini_metadata,
             "validation": validation_result.to_dict(),
+            "mathematical_validation": math_validation_result.to_dict(),
             "document_hash": "N/A for non-PDF files",
             "processing_method": "paddleocr_gemini_text",
             "total_processing_time": total_time,
@@ -148,6 +164,7 @@ class InvoiceProcessor:
                 "ocr_time": ocr_time,
                 "structuring_time": structuring_time,
                 "correction_time": correction_time,
+                "mathematical_validation_time": math_validation_time,
                 "validation_time": validation_time
             }
         }
