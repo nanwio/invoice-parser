@@ -40,7 +40,7 @@ class JSONCleaner:
 
             lines.append(''.join(clean_line).rstrip())
 
-        return '\\n'.join(lines)
+        return '\n'.join(lines)
 
     @staticmethod
     def strip_markdown(json_text: str) -> str:
@@ -56,11 +56,11 @@ class JSONCleaner:
         json_text = json_text.strip()
 
         if json_text.startswith('```'):
-            lines = json_text.split('\\n', 1)
+            lines = json_text.split('\n', 1)
             if len(lines) > 1:
                 json_text = lines[1]
 
         if json_text.endswith('```'):
-            json_text = json_text.rsplit('\\n```', 1)[0]
+            json_text = json_text.rsplit('\n```', 1)[0]
 
         return json_text.strip()
