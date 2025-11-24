@@ -3,14 +3,6 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
-class TaxRateType(enum.StrEnum):
-    """Tax rate type applied."""
-    IGIC = "IGIC"
-    IVA = "IVA"
-    OTHER = "OTHER"
-    EXEMPT = "EXEMPT"
-
-
 class BankPaymentMethod(enum.StrEnum):
     """Payment method used."""
     BANK_TRANSFER = "BANK_TRANSFER"
@@ -22,9 +14,9 @@ class BankPaymentMethod(enum.StrEnum):
 
 class Tax(BaseModel):
     """Tax calculation details."""
-    type: TaxRateType = Field(..., description="Tax type (IVA, IGIC, etc.)")
-    rate: float = Field(..., description="Tax rate as percentage")
-    amount: float = Field(..., description="Tax amount")
+    type: str = Field(..., description="Tax type (IVA, IGIC, VAT, GST, Sales Tax, Impuesto electricidad, etc.)")
+    rate: float = Field(..., description="Tax rate as percentage (most critical field)")
+    amount: float = Field(..., description="Tax amount in currency (most critical field)")
     taxable_base: Optional[float] = Field(None, description="Taxable base")
 
 

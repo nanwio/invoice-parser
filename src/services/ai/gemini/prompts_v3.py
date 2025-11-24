@@ -92,34 +92,37 @@ CRITICAL RULE: subtotal = SUM of ALL items[].line_total
 
 ### Tax Extraction (CHAIN OF THOUGHT)
 
+PRIORITY: amount and rate are THE MOST CRITICAL FIELDS. Type is descriptive only.
+
 STEP 1 - Locate tax section:
 Search for keywords: "Tax", "VAT", "IVA", "GST", "IGIC", "MwSt", "TVA", "BTW", "MOMS", "Sales Tax", "Impuesto", "Steuer", etc.
 
-STEP 2 - Identify tax name:
-Extract EXACTLY as written:
-- "VAT" → type: "VAT"
-- "IVA 21%" → type: "IVA"
-- "GST (10%)" → type: "GST"
-- "MwSt 19%" → type: "MwSt"
-- "IGIC 7%" → type: "IGIC"
-- "Sales Tax" → type: "Sales Tax"
-- If unclear/multiple → type: "OTHER"
-
-STEP 3 - Extract rate (if shown):
-Pattern: "VAT 20%", "IVA (21%)", "GST: 10%"
-→ rate: 20.0, 21.0, 10.0
-
-STEP 4 - Extract amount (CRITICAL):
+STEP 2 - Extract amount (MOST CRITICAL):
 ONLY extract if EXPLICIT amount shown:
 - "VAT: £120.00" → amount: 120.0
 - "Total IVA: 45,50€" → amount: 45.5
 - "GST Amount: $25.00" → amount: 25.0
+- "Impuesto electricidad: 2,16€" → amount: 2.16
 - "IGIC 7%" with NO amount → amount: 0.0 (rate-only)
 
 VALIDATION:
 - IF amount > 0.0 → You MUST have found explicit text
 - IF only rate (%) visible → amount: 0.0
 - NEVER calculate: subtotal × rate
+
+STEP 3 - Extract rate (CRITICAL):
+Pattern: "VAT 20%", "IVA (21%)", "GST: 10%"
+→ rate: 20.0, 21.0, 10.0
+
+STEP 4 - Identify tax name (descriptive only):
+Extract EXACTLY as written in document:
+- "VAT" → type: "VAT"
+- "IVA 21%" → type: "IVA"
+- "Impuesto electricidad" → type: "Impuesto electricidad"
+- "GST" → type: "GST"
+- "IGIC reducido" → type: "IGIC reducido"
+
+Note: Type can be ANY string - no restrictions. Focus on accuracy of amount and rate.
 
 ### Worldwide Tax Systems (Reference - DO NOT assume)
 This system handles 90% of global invoices covering:
@@ -130,8 +133,10 @@ This system handles 90% of global invoices covering:
 - Other: PST, HST, BTW, MwSt, TVA, MOMS, consumption tax, etc.
 
 ### Additional Taxes
-Array for secondary taxes (environmental, electricity, municipal, etc.)
-Same extraction rules: explicit amounts only
+Array for secondary taxes (environmental, electricity, municipal, multiple VAT rates, etc.)
+- Extract type EXACTLY as shown: "Impuesto electricidad", "IGIC normal", "Environmental tax", etc.
+- Same extraction rules: explicit amounts only, NEVER calculate
+- Example: "Impuesto electricidad: 2.16€" → {type: "Impuesto electricidad", rate: 0.0, amount: 2.16}
 
 ### Discount
 ONLY if GLOBAL discount shown:
@@ -187,6 +192,13 @@ Example 4 - US Invoice with Sales Tax:
 OCR Input: "Invoice INV-789 ... Sales Tax (8.5%): $17.00 ... Total Due: $217.00"
 Tax extraction: type: "Sales Tax", rate: 8.5, amount: 17.0
 
+Example 6 - Electricity Invoice with Special Taxes:
+OCR Input: "Factura C24CON003123634 ... IGIC reducido: 1,34€ ... Impuesto electricidad: 2,16€ ... Total: 46,61€"
+Tax extraction:
+  - Primary: type: "IGIC reducido", rate: 3.0, amount: 1.34
+  - Additional: [{type: "Impuesto electricidad", rate: 0.0, amount: 2.16}]
+Note: Type can be ANY string - extract exactly as shown
+
 Example 5 - Pattern B Table (Expense Categories):
 TABLE 1 (Page 1) [1]
 {{Concepto, HONORARIOS, SUPLIDOS, PROVISIONES}}
@@ -209,11 +221,15 @@ Correct: Extract tax ONLY if explicit: "VAT: £20.00" → amount: 20.0
 
 ❌ ERROR 3: Hardcoding tax types
 Wrong: Always use "IVA" or "VAT"
-Correct: Extract exactly as shown (GST, MwSt, BTW, IGIC, Sales Tax, etc.)
+Correct: Extract exactly as shown (GST, MwSt, BTW, IGIC, Sales Tax, Impuesto electricidad, etc.)
 
 ❌ ERROR 4: Ignoring currency context
 Wrong: Assume EUR for all invoices
 Correct: Extract from document (USD, GBP, AUD, CAD, INR, etc.)
+
+❌ ERROR 5: Prioritizing type over amount
+Wrong: Focus on getting tax type perfect, guess amount if unclear
+Correct: AMOUNT and RATE are critical. Type is descriptive only - any string is valid
 
 </ERROR_PREVENTION>
 
@@ -229,13 +245,15 @@ Return ONLY valid JSON conforming to this schema:
 </OUTPUT_SCHEMA>
 
 <FINAL_CHECKLIST>
-Before returning JSON, verify:
+Before returning JSON, verify (in priority order):
+✓ tax.amount extracted ONLY from explicit text (MOST CRITICAL - no calculations)
+✓ tax.rate extracted accurately (MOST CRITICAL)
+✓ subtotal = exact sum of items[].line_total
+✓ total_amount matches document
 ✓ All numeric fields are float or 0.0 (no null)
 ✓ items[] contains ONLY goods/services (no headers, taxes, fees)
-✓ subtotal = exact sum of items[].line_total
-✓ tax.type extracted EXACTLY as shown in document
-✓ tax.amount extracted ONLY from explicit text (no calculations)
 ✓ currency is ISO 4217 code (EUR, USD, GBP, etc.)
+✓ tax.type extracted exactly as shown (descriptive only)
 ✓ No invented or hallucinated data
 </FINAL_CHECKLIST>
 
