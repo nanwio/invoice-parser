@@ -98,6 +98,22 @@ class InvoiceProcessor:
 
             structuring_time = time.perf_counter() - structuring_start
 
+            # Check if Gemini extraction failed
+            if invoice is None:
+                logger.error("Gemini failed to extract valid invoice data")
+                return None, {
+                    **gemini_metadata,
+                    "document_hash": "N/A for non-PDF files",
+                    "processing_method": "paddleocr_gemini_text",
+                    "total_processing_time": time.perf_counter() - start_time,
+                    "performance_breakdown": {
+                        "ocr_time": ocr_time,
+                        "structuring_time": structuring_time,
+                        "correction_time": 0,
+                        "validation_time": 0
+                    }
+                }
+
             # Step 3: Apply financial corrections
             logger.info("Step 3/4: Applying intelligent financial corrections")
             correction_start = time.perf_counter()
