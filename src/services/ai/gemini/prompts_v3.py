@@ -136,7 +136,7 @@ This system handles 90% of global invoices covering:
 Array for secondary taxes (environmental, electricity, municipal, multiple VAT rates, etc.)
 - Extract type EXACTLY as shown: "Impuesto electricidad", "IGIC normal", "Environmental tax", etc.
 - Same extraction rules: explicit amounts only, NEVER calculate
-- Example: "Impuesto electricidad: 2.16€" → {type: "Impuesto electricidad", rate: 0.0, amount: 2.16}
+- Example: "Impuesto electricidad: 2.16€" → {{type: "Impuesto electricidad", rate: 0.0, amount: 2.16}}
 
 ### Discount
 ONLY if GLOBAL discount shown:
@@ -196,7 +196,7 @@ Example 6 - Electricity Invoice with Special Taxes:
 OCR Input: "Factura C24CON003123634 ... IGIC reducido: 1,34€ ... Impuesto electricidad: 2,16€ ... Total: 46,61€"
 Tax extraction:
   - Primary: type: "IGIC reducido", rate: 3.0, amount: 1.34
-  - Additional: [{type: "Impuesto electricidad", rate: 0.0, amount: 2.16}]
+  - Additional: [{{type: "Impuesto electricidad", rate: 0.0, amount: 2.16}}]
 Note: Type can be ANY string - extract exactly as shown
 
 Example 5 - Pattern B Table (Expense Categories):
