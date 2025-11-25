@@ -17,6 +17,7 @@ class InvoiceProcessingSettings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 10
     ALLOWED_FILE_TYPES: list[str] = ["application/pdf"]
     PROCESSING_TIMEOUT_SECONDS: int = 30
+    DEBUG_OCR_OUTPUT: bool = os.getenv("DEBUG_OCR_OUTPUT", "false").lower() == "true"
 
 
 class AIModelSettings(BaseSettings):

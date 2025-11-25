@@ -92,8 +92,23 @@ class InvoiceProcessor:
 
             formatted_text = format_ocr_results_for_llm(ocr_results)
 
-            # DEBUG: Log OCR text to analyze quality
-            logger.info(f"OCR extracted text ({len(formatted_text)} chars):\n{formatted_text[:2000]}...")
+            # Log table summary
+            total_tables = sum(r.get('table_count', 0) for r in ocr_results)
+            logger.info(f"OCR summary: {len(ocr_results)} pages, {total_tables} tables, {len(formatted_text)} chars")
+
+            for idx, result in enumerate(ocr_results, 1):
+                logger.info(f"  Page {idx}: {result.get('table_count', 0)} tables, "
+                           f"{result.get('region_count', 0)} regions, "
+                           f"{len(result.get('text', ''))} chars")
+
+            # DEBUG: Log FULL OCR text when enabled (use env var DEBUG_OCR_OUTPUT=true)
+            from src.config.settings import app_settings
+            if app_settings.invoice_processing.DEBUG_OCR_OUTPUT:
+                logger.info("="*80)
+                logger.info("FULL OCR OUTPUT (DEBUG MODE ENABLED):")
+                logger.info("="*80)
+                logger.info(formatted_text)
+                logger.info("="*80)
 
             invoice, gemini_metadata = await self.gemini_processor.structure_invoice_data_from_text(formatted_text)
 

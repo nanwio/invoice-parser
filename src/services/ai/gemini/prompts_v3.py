@@ -153,14 +153,18 @@ Infer from keywords:
 - "Card", "Tarjeta", "Credit Card", "Karte" → CARD
 - "Cash", "Efectivo", "Bar" → CASH
 - "Check", "Cheque" → CHECK
-- "Direct Debit", "Domiciliación" → DIRECT_DEBIT
+- "Direct Debit", "Domiciliación", "Domiciliacion Bancaria" → DIRECT_DEBIT
 
 ## 4. LINE ITEMS EXTRACTION
 
 CRITICAL RULES:
-- items[] contains ONLY goods/services
-- NEVER include: Column headers, taxes, discounts, surcharges
+- items[] contains ONLY goods/services sold or provided
+- NEVER include: Column headers, taxes, discounts, surcharges, fees, rentals, financing charges, or "otros"/"other"
 - For Pattern B tables: Extract ONE item with actual description
+
+DISTINCTION FOR UTILITY/COMPLEX INVOICES:
+Include in items[]: "Potencia contratada", "Energía consumida", actual products/services
+NEVER in items[]: "Recargo" (surcharge), "Alquiler" (rental), "Otros" (other), "Impuesto" (tax), or any fees
 
 For each item:
 - description: Product/service name (string)
@@ -211,25 +215,29 @@ Note: Only ONE item, not three (HONORARIOS/SUPLIDOS/PROVISIONES are categories, 
 
 <ERROR_PREVENTION>
 
-❌ ERROR 1: Treating table headers as items
+ERROR 1: Treating table headers as items
 Wrong: items: [{{"description": "HONORARIOS"}}, {{"description": "SUPLIDOS"}}]
 Correct: items: [{{"description": "Actual item name", "line_total": 45.0}}]
 
-❌ ERROR 2: Calculating tax amounts
-Wrong: See "VAT 20%" → calculate 100 × 0.20 = 20.0
-Correct: Extract tax ONLY if explicit: "VAT: £20.00" → amount: 20.0
+ERROR 2: Calculating tax amounts
+Wrong: See "VAT 20%" and calculate 100 × 0.20 = 20.0
+Correct: Extract tax ONLY if explicit: "VAT: £20.00" results in amount: 20.0
 
-❌ ERROR 3: Hardcoding tax types
+ERROR 3: Hardcoding tax types
 Wrong: Always use "IVA" or "VAT"
 Correct: Extract exactly as shown (GST, MwSt, BTW, IGIC, Sales Tax, Impuesto electricidad, etc.)
 
-❌ ERROR 4: Ignoring currency context
+ERROR 4: Ignoring currency context
 Wrong: Assume EUR for all invoices
 Correct: Extract from document (USD, GBP, AUD, CAD, INR, etc.)
 
-❌ ERROR 5: Prioritizing type over amount
+ERROR 5: Prioritizing type over amount
 Wrong: Focus on getting tax type perfect, guess amount if unclear
 Correct: AMOUNT and RATE are critical. Type is descriptive only - any string is valid
+
+ERROR 6: Including surcharges/fees in items
+Wrong: items: [{{"description": "Recargo del 20%", "line_total": 7.05}}, {{"description": "Alquiler del contador", "line_total": 0.72}}]
+Correct: items: [{{"description": "Energía consumida", "line_total": 21.88}}] (surcharges/fees excluded)
 
 </ERROR_PREVENTION>
 
@@ -246,15 +254,15 @@ Return ONLY valid JSON conforming to this schema:
 
 <FINAL_CHECKLIST>
 Before returning JSON, verify (in priority order):
-✓ tax.amount extracted ONLY from explicit text (MOST CRITICAL - no calculations)
-✓ tax.rate extracted accurately (MOST CRITICAL)
-✓ subtotal = exact sum of items[].line_total
-✓ total_amount matches document
-✓ All numeric fields are float or 0.0 (no null)
-✓ items[] contains ONLY goods/services (no headers, taxes, fees)
-✓ currency is ISO 4217 code (EUR, USD, GBP, etc.)
-✓ tax.type extracted exactly as shown (descriptive only)
-✓ No invented or hallucinated data
+[CRITICAL] tax.amount extracted ONLY from explicit text (no calculations)
+[CRITICAL] tax.rate extracted accurately
+[CRITICAL] subtotal = exact sum of items[].line_total
+[CRITICAL] total_amount matches document
+All numeric fields are float or 0.0 (no null)
+items[] contains ONLY goods/services (no headers, taxes, fees, surcharges, rentals)
+currency is ISO 4217 code (EUR, USD, GBP, etc.)
+tax.type extracted exactly as shown (descriptive only)
+No invented or hallucinated data
 </FINAL_CHECKLIST>
 
 <OCR_TEXT>

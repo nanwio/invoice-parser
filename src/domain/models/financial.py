@@ -9,6 +9,8 @@ class BankPaymentMethod(enum.StrEnum):
     BANK_DEPOSIT = "BANK_DEPOSIT"
     CARD = "CARD"
     CASH = "CASH"
+    CHECK = "CHECK"
+    DIRECT_DEBIT = "DIRECT_DEBIT"
     OTHER = "OTHER"
 
 
