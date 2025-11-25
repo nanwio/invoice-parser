@@ -47,11 +47,9 @@ steps:
       - "--remove-env-vars"
       - "REDIS_URL"
       - "--update-env-vars"
-      - "ENVIRONMENT=production,GEMINI_MODEL_NAME=gemini-2.5-flash-lite"
+      - "ENVIRONMENT=production,GEMINI_MODEL_NAME=gemini-2.5-flash-lite,DEBUG_OCR_OUTPUT=true"
       - "--update-secrets"
       - "GEMINI_API_KEY=GEMINI_API_KEY:latest,JWT_SECRET_KEY=SECRET_KEY:latest,REDIS_URL=REDIS_URL:latest"
-      - "--set-env-vars"
-      - "DEBUG_OCR_OUTPUT=true"
 
 images:
   - "gcr.io/$PROJECT_ID/invoice-parser:$BUILD_ID"
