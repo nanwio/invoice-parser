@@ -69,17 +69,19 @@ class GeminiInvoiceProcessor:
             logger.error(f"Raw response: {response.text if 'response' in locals() else 'N/A'}")
             return None, {"success": False, "error": f"JSON parse error: {str(e)}"}
         except ValueError as e:
-            logger.error(f"Pydantic validation failed: {e}")
+            error_msg = str(e)
+            logger.error(f"Pydantic validation failed: {error_msg}")
             logger.error(f"Raw JSON that failed validation: {json_text if 'json_text' in locals() else 'N/A'}")
             return None, {
                 "success": False,
                 "error": "Validation error",
-                "error_detail": str(e),
+                "error_detail": error_msg,
                 "error_type": "pydantic_validation"
             }
         except Exception as e:
-            logger.error(f"Gemini structuring failed: {e}")
-            return None, {"success": False, "error": str(e)}
+            error_msg = str(e)
+            logger.error(f"Gemini structuring failed: {error_msg}")
+            return None, {"success": False, "error": error_msg}
 
     def _extract_json(self, raw_text: str) -> str:
         """Extract clean JSON from Gemini response."""
