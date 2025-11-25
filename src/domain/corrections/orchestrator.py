@@ -1,33 +1,26 @@
-"""Orchestrates all invoice correction strategies."""
+"""Orchestrates invoice validation strategies."""
 from typing import Optional
 from loguru import logger
 from src.domain.models import Invoice
 
 from .strategies.unit_price_validator import UnitPriceValidator
-from .strategies.tax_validator import TaxValidator
-from .strategies.canary_tax_fixer import CanaryTaxFixer
-from .strategies.discount_detector import DiscountDetector
-from .strategies.subtotal_fixer import SubtotalFixer
 
 
 class CorrectionOrchestrator:
-    """Applies all corrections in sequence using Strategy Pattern."""
+    """Applies validation strategies (detection only, no data modification)."""
 
     @classmethod
     def apply_all_corrections(cls, invoice: Optional[Invoice]) -> Optional[Invoice]:
-        """Apply all correction strategies to the invoice."""
+        """Apply validation strategies to the invoice."""
         if invoice is None:
             logger.warning("Cannot apply corrections: invoice is None")
             return None
 
-        logger.info("Applying financial corrections")
+        logger.info("Applying validation checks")
 
-        # Apply strategies in order
+        # Only detection/logging, no data modification
+        # Actual corrections handled by MathematicalValidator in Step 4
         invoice = UnitPriceValidator.apply(invoice)
-        invoice = TaxValidator.apply(invoice)
-        invoice = CanaryTaxFixer.apply(invoice)
-        invoice = DiscountDetector.apply(invoice)
-        invoice = SubtotalFixer.apply(invoice)
 
-        logger.success("Financial corrections applied successfully")
+        logger.success("Validation checks completed")
         return invoice
