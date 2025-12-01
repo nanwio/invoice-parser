@@ -4,8 +4,11 @@ from typing import List, Dict, Any
 from loguru import logger
 from PIL import Image
 import numpy as np
+import cv2
 
 from src.services.ocr.paddle.provider import PaddleOCRProvider
+from src.services.ocr.paddle.quality_analysis.detector import ImageQualityDetector
+from src.services.ocr.paddle.preprocessing.orchestrator import PreprocessingOrchestrator
 from .toon_converter import TOONConverter, TOONTableAnalyzer
 from .text_extractor import RegionTextExtractor
 
@@ -25,8 +28,12 @@ class InvoiceTableProcessor:
         self.gpu_lock = gpu_lock if gpu_lock is not None else PaddleOCRProvider.get_lock()
         self._is_gpu_available = PaddleOCRProvider.is_gpu_available()
 
+        # Add image quality analysis and preprocessing
+        self.quality_detector = ImageQualityDetector()
+        self.preprocessor = PreprocessingOrchestrator()
+
         logger.info(
-            f"Invoice Table Processor initialized "
+            f"Invoice Table Processor initialized with preprocessing "
             f"({'GPU mode with lock' if self._is_gpu_available else 'CPU mode'})"
         )
 
@@ -43,7 +50,20 @@ class InvoiceTableProcessor:
         """
         logger.debug(f"Processing page {page_num} with PPStructure")
 
-        img_array = np.array(image)
+        # Convert PIL to numpy array (BGR for OpenCV)
+        img_array = np.array(image.convert('RGB'))
+        img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+
+        # Analyze image quality
+        quality_analysis = self.quality_detector.analyze(img_array)
+        logger.debug(f"Page {page_num} quality: score={quality_analysis.overall_score:.1f}, "
+                    f"contrast={quality_analysis.contrast_score:.1f}, "
+                    f"noise={quality_analysis.noise_level:.1f}")
+
+        # Apply preprocessing if needed
+        if quality_analysis.overall_score < 70.0:
+            logger.info(f"Page {page_num}: Applying preprocessing (low quality detected)")
+            img_array = self.preprocessor.preprocess(img_array, quality_analysis)
 
         def process_with_lock():
             with self.gpu_lock:
