@@ -5,14 +5,71 @@ Table structure detection is delegated to TATR.
 """
 
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from threading import Lock
 import numpy as np
 import cv2
 from PIL import Image
 from loguru import logger
+from paddleocr import PaddleOCR
+import paddle
 
-from src.services.ocr.paddle.provider import PaddleOCRProvider
 from src.services.table_detection.cell_text_matcher import TextBox
+
+
+class PaddleOCRTextProvider:
+    """Singleton provider for PaddleOCR text-only engine."""
+
+    _ocr_engine: Optional[PaddleOCR] = None
+    _gpu_lock: Optional[Lock] = None
+    _is_gpu_available: bool = False
+
+    @classmethod
+    def _initialize(cls):
+        """Initialize PaddleOCR text-only engine if not already initialized."""
+        if cls._ocr_engine is not None:
+            return
+
+        logger.info("Initializing PaddleOCR text-only engine...")
+
+        # Auto-detect GPU
+        cls._is_gpu_available = paddle.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0
+
+        if cls._is_gpu_available:
+            logger.info(f"GPU detected for PaddleOCR: {paddle.device.cuda.device_count()} device(s)")
+        else:
+            logger.info("No GPU detected - PaddleOCR running in CPU mode")
+
+        # Initialize PaddleOCR (text detection + recognition only, no table structure)
+        cls._ocr_engine = PaddleOCR(
+            use_angle_cls=False,  # Skip angle classification for speed
+            lang='en',
+            use_gpu=cls._is_gpu_available,
+            show_log=False,
+            enable_mkldnn=False,
+            cpu_threads=1,
+        )
+
+        cls._gpu_lock = Lock()
+        logger.success(f"PaddleOCR text engine initialized ({'GPU' if cls._is_gpu_available else 'CPU'} mode)")
+
+    @classmethod
+    def get_ocr(cls) -> PaddleOCR:
+        """Get singleton PaddleOCR instance."""
+        cls._initialize()
+        return cls._ocr_engine
+
+    @classmethod
+    def get_lock(cls) -> Lock:
+        """Get singleton GPU lock."""
+        cls._initialize()
+        return cls._gpu_lock
+
+    @classmethod
+    def is_gpu_available(cls) -> bool:
+        """Check if GPU is available."""
+        cls._initialize()
+        return cls._is_gpu_available
 
 
 class TextRegion:
@@ -34,9 +91,9 @@ class PaddleTextDetector:
             ocr_engine: PaddleOCR engine (default: from provider)
             gpu_lock: GPU lock (default: from provider)
         """
-        self.ocr_engine = ocr_engine if ocr_engine is not None else PaddleOCRProvider.get_ocr()
-        self.gpu_lock = gpu_lock if gpu_lock is not None else PaddleOCRProvider.get_lock()
-        self._is_gpu_available = PaddleOCRProvider.is_gpu_available()
+        self.ocr_engine = ocr_engine if ocr_engine is not None else PaddleOCRTextProvider.get_ocr()
+        self.gpu_lock = gpu_lock if gpu_lock is not None else PaddleOCRTextProvider.get_lock()
+        self._is_gpu_available = PaddleOCRTextProvider.is_gpu_available()
 
         logger.info(
             f"PaddleTextDetector initialized "
