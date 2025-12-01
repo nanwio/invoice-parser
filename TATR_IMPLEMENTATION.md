@@ -84,13 +84,14 @@ PDF → Images ───┤
 ### 2. Dependencies
 **`pyproject.toml`**
 - Added `transformers = "^4.36.2"` to production dependencies
+- Added `timm = "^0.9.0"` to production dependencies (required by TATR)
 - Added `torch = "^2.4.0"` to production dependencies
 - Added `torchvision = "^0.19.0"` to production dependencies
 
 ### 3. Docker Build Configuration
 **`Dockerfile`**
 - Added PyTorch installation with CUDA 12.1 support (lines 61-65)
-- Added `transformers` to application dependencies (line 71)
+- Added `transformers` and `timm` to application dependencies (lines 71-72)
 - Pre-cache TATR model during build (lines 94-98)
 - Copy cached model to final runtime image (line 139)
 

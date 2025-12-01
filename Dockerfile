@@ -69,6 +69,7 @@ RUN pip install --no-cache-dir \
 RUN pip install --no-cache-dir \
     "numpy<2" \
     transformers==4.36.2 \
+    timm \
     fastapi==0.115.6 \
     uvicorn==0.32.1 \
     gunicorn==21.0.0 \
