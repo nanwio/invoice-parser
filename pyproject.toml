@@ -36,6 +36,9 @@ pyjwt = "^2.10.1"
 pypdf = "^3.17.4"
 setuptools = "^70.0.0"
 pandas = "~=2.1.4"
+transformers = "^4.36.2"
+torch = "^2.4.0"
+torchvision = "^0.19.0"
 
 [tool.poetry.group.dev.dependencies]
 rich = "^14.0.0"

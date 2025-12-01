@@ -58,10 +58,17 @@ RUN pip uninstall -y paddlepaddle paddlepaddle-tiny || true && \
     paddleclas==2.5.2 \
     opencv-python-headless==4.8.1.78
 
+# Install PyTorch with CUDA 12.1 support (for Table Transformer)
+RUN pip install --no-cache-dir \
+    torch==2.4.0 \
+    torchvision==0.19.0 \
+    --index-url https://download.pytorch.org/whl/cu121
+
 # Install remaining application dependencies
 # IMPORTANT: Pin numpy<2 to prevent upgrade (PaddlePaddle requires NumPy 1.x)
 RUN pip install --no-cache-dir \
     "numpy<2" \
+    transformers==4.36.2 \
     fastapi==0.115.6 \
     uvicorn==0.32.1 \
     gunicorn==21.0.0 \
@@ -84,7 +91,13 @@ RUN pip install --no-cache-dir \
 COPY *.py ./
 COPY src ./src
 
-# NOTE: Model caching removed - models download on first request at runtime
+# Pre-cache Table Transformer model (downloaded during build, not runtime)
+# This ensures instant cold starts on Cloud Run
+RUN python -c "from transformers import AutoImageProcessor, TableTransformerForObjectDetection; \
+    AutoImageProcessor.from_pretrained('microsoft/table-transformer-structure-recognition'); \
+    TableTransformerForObjectDetection.from_pretrained('microsoft/table-transformer-structure-recognition')"
+
+# NOTE: PaddleOCR models download on first request at runtime
 # Similar to maite-transcripto-gpu pattern: lazy initialization when GPU is available
 # Models will be downloaded to /root/.paddleocr on first inference (~40MB total)
 
@@ -121,6 +134,9 @@ COPY --from=builder /usr/local/lib/python3.12/dist-packages /usr/local/lib/pytho
 
 # Copy application code from builder
 COPY --from=builder /app /app
+
+# Copy cached TATR model from builder (Hugging Face cache in /root/.cache)
+COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
 
 # Create non-root user and set permissions
 RUN groupadd --system --gid 1001 appuser && \

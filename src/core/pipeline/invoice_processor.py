@@ -12,7 +12,7 @@ import os
 
 from src.domain.models import Invoice
 from src.services.ai.gemini_processor import GeminiInvoiceProcessor
-from src.services.ocr.paddle import create_paddle_processor
+from src.services.table_detection.processor import create_hybrid_processor
 from src.domain.validation.orchestrator import InvoiceValidator
 from src.domain.validation.validators.mathematical_validator import MathematicalValidator
 from src.domain.corrections.orchestrator import CorrectionOrchestrator
@@ -22,32 +22,36 @@ from src.core.pipeline.utils.helpers import format_ocr_results_for_llm, cleanup_
 
 class InvoiceProcessor:
     """
-    Invoice processing pipeline (simplified, based on maite-transcripto-gpu):
-    1. PaddleOCR/PPStructure: Extract text (with table recognition)
-    2. Gemini Text: Structure extracted text into JSON
-    3. Validation: Check financial data
+    Invoice processing pipeline with hybrid TATR + PaddleOCR:
+    1. TATR: Detect table structures (cells with row/col indices)
+    2. PaddleOCR: Extract text with bounding boxes
+    3. Cell-Text Matching: Assign texts to cells using vectorized IoU
+    4. Gemini Text: Structure extracted text into JSON
+    5. Validation: Check financial data
 
-    Single mode: OCR → Gemini Text (no Vision mode)
+    Single mode: Hybrid OCR → Gemini Text (no Vision mode)
     """
 
     def __init__(self):
-        """Initialize processor with OCR + Gemini Text pipeline."""
+        """Initialize processor with hybrid TATR + PaddleOCR pipeline."""
         self.gemini_processor = GeminiInvoiceProcessor()
-        self.paddle_processor = create_paddle_processor()
+        self.hybrid_processor = create_hybrid_processor()
         self.validator = InvoiceValidator()
 
-        logger.info("InvoiceProcessor initialized in OCR+TEXT mode")
+        logger.info("InvoiceProcessor initialized with TATR + PaddleOCR hybrid pipeline")
 
 
     async def process_invoice(self, document_bytes: bytes, content_type: str) -> tuple[Invoice, dict]:
         """
-        Processes an invoice using PaddleOCR + Gemini Text pipeline.
+        Processes an invoice using hybrid TATR + PaddleOCR + Gemini pipeline.
 
-        Single mode workflow:
-        1. PaddleOCR/PPStructure: Extract text with table recognition
-        2. Gemini Text: Structure extracted text into Invoice JSON
-        3. Corrections: Apply financial corrections
-        4. Validation: Validate structured data
+        Workflow:
+        1. TATR: Detect table structures (GPU-accelerated)
+        2. PaddleOCR: Extract text with bounding boxes (GPU-accelerated)
+        3. Cell-Text Matching: Assign texts to cells (vectorized IoU)
+        4. Gemini Text: Structure extracted text into Invoice JSON
+        5. Corrections: Apply financial corrections
+        6. Validation: Validate structured data
 
         Args:
             document_bytes: Raw document bytes
@@ -65,47 +69,47 @@ class InvoiceProcessor:
         validation_time = 0.0
 
         try:
-            # Step 1: Extract text with PaddleOCR/PPStructure
-            logger.info("Step 1/4: Extracting text with PaddleOCR")
+            # Step 1: Extract tables and text with TATR + PaddleOCR hybrid pipeline
+            logger.info("Step 1/5: Extracting tables with TATR + PaddleOCR")
             ocr_start = time.perf_counter()
 
-            # Create temporary file for PaddleOCR processing
+            # Create temporary file for processing
             if content_type == "application/pdf":
                 temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
                 temp_pdf.write(document_bytes)
                 temp_pdf.close()
 
                 try:
-                    ocr_results = await self.paddle_processor.process_pdf_async(temp_pdf.name)
+                    ocr_results = await self.hybrid_processor.process_pdf_async(temp_pdf.name)
                 finally:
                     await cleanup_temp_file(temp_pdf.name)
             else:
                 # Process image directly from bytes
-                ocr_results = await self.paddle_processor.process_image_async(document_bytes)
+                ocr_results = await self.hybrid_processor.process_image_async(document_bytes)
 
             ocr_time = time.perf_counter() - ocr_start
-            logger.info(f"OCR extraction completed in {ocr_time:.2f}s, {len(ocr_results)} page(s)")
+            logger.info(f"Hybrid extraction completed in {ocr_time:.2f}s, {len(ocr_results)} page(s)")
 
-            # Step 2: Format OCR text for Gemini
-            logger.info("Step 2/4: Structuring data with Gemini Text")
+            # Step 2: Format extracted text for Gemini
+            logger.info("Step 2/5: Structuring data with Gemini Text")
             structuring_start = time.perf_counter()
 
             formatted_text = format_ocr_results_for_llm(ocr_results)
 
             # Log table summary
             total_tables = sum(r.get('table_count', 0) for r in ocr_results)
-            logger.info(f"OCR summary: {len(ocr_results)} pages, {total_tables} tables, {len(formatted_text)} chars")
+            logger.info(f"Hybrid extraction summary: {len(ocr_results)} pages, {total_tables} tables, {len(formatted_text)} chars")
 
             for idx, result in enumerate(ocr_results, 1):
                 logger.info(f"  Page {idx}: {result.get('table_count', 0)} tables, "
                            f"{result.get('region_count', 0)} regions, "
                            f"{len(result.get('text', ''))} chars")
 
-            # DEBUG: Log FULL OCR text when enabled (use env var DEBUG_OCR_OUTPUT=true)
+            # DEBUG: Log FULL extracted text when enabled (use env var DEBUG_OCR_OUTPUT=true)
             from src.config.settings import app_settings
             if app_settings.invoice_processing.DEBUG_OCR_OUTPUT:
                 logger.info("="*80)
-                logger.info("FULL OCR OUTPUT (DEBUG MODE ENABLED):")
+                logger.info("FULL EXTRACTED TEXT (TATR + PaddleOCR - DEBUG MODE):")
                 logger.info("="*80)
                 logger.info(formatted_text)
                 logger.info("="*80)
@@ -120,7 +124,7 @@ class InvoiceProcessor:
                 return None, {
                     **gemini_metadata,
                     "document_hash": "N/A for non-PDF files",
-                    "processing_method": "paddleocr_gemini_text",
+                    "processing_method": "tatr_paddleocr_gemini_text",
                     "total_processing_time": time.perf_counter() - start_time,
                     "performance_breakdown": {
                         "ocr_time": ocr_time,
@@ -173,7 +177,7 @@ class InvoiceProcessor:
             "validation": validation_result.to_dict(),
             "mathematical_validation": math_validation_result.to_dict(),
             "document_hash": "N/A for non-PDF files",
-            "processing_method": "paddleocr_gemini_text",
+            "processing_method": "tatr_paddleocr_gemini_text",
             "total_processing_time": total_time,
             "performance_breakdown": {
                 "ocr_time": ocr_time,
