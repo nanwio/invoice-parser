@@ -48,6 +48,12 @@ class PaddleOCRTextProvider:
             show_log=False,
             enable_mkldnn=False,
             cpu_threads=1,
+            # Detection model parameters for better small text detection
+            det_db_thresh=0.3,  # Lower threshold for text detection (default: 0.3)
+            det_db_box_thresh=0.5,  # Lower threshold for bounding box filtering (default: 0.6)
+            det_db_unclip_ratio=1.6,  # Expand detected boxes slightly (default: 1.5)
+            # Recognition parameters
+            rec_batch_num=6,  # Batch size for recognition (default: 6)
         )
 
         cls._gpu_lock = Lock()
