@@ -47,9 +47,18 @@ class HybridTableProcessor:
         """
         logger.debug(f"Processing page {page_num} with TATR + PaddleOCR")
 
+        # Ensure image is fully loaded and convert to RGB
+        # This prevents "truncated image" errors when accessing from multiple threads
+        image = image.convert('RGB')
+
+        # Create independent copies for each processor to avoid PIL threading issues
+        # PIL images can have lazy-loaded data that corrupts under concurrent access
+        image_for_tatr = image.copy()
+        image_for_ocr = image.copy()
+
         # Run TATR and PaddleOCR in parallel for maximum speed
-        tatr_task = self.tatr.detect_tables_async(image)
-        ocr_task = self.paddle_ocr.detect_text_async(image)
+        tatr_task = self.tatr.detect_tables_async(image_for_tatr)
+        ocr_task = self.paddle_ocr.detect_text_async(image_for_ocr)
 
         tables, text_boxes = await asyncio.gather(tatr_task, ocr_task)
 

@@ -115,7 +115,11 @@ class PaddleTextDetector:
         """Synchronous text detection (runs in thread pool)."""
 
         # Convert PIL to OpenCV format (BGR)
-        img_array = np.array(image.convert('RGB'))
+        # Ensure image is in RGB mode (defensive - should already be RGB from caller)
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+
+        img_array = np.array(image)
         img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
 
         # Run OCR with GPU lock
