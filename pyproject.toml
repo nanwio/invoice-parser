@@ -38,9 +38,10 @@ setuptools = "^70.0.0"
 pandas = "~=2.1.4"
 transformers = "4.46.3"
 torch = "2.6.0"
-torchvision = "0.19.0"
+torchvision = "0.21.0"
 flash-attn = "2.7.3"
 einops = "^0.7.0"
+tokenizers = "0.20.3"
 
 [tool.poetry.group.dev.dependencies]
 rich = "^14.0.0"

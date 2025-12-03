@@ -4,7 +4,7 @@
 # ==============================================================================
 
 # ==================== STAGE 1: Builder (install + pre-cache models) ====================
-FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04 AS builder
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04 AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -61,7 +61,7 @@ RUN pip uninstall -y paddlepaddle paddlepaddle-tiny || true && \
 # Install PyTorch 2.6.0 with CUDA 11.8 support (for DeepSeek-OCR)
 RUN pip install --no-cache-dir \
     torch==2.6.0 \
-    torchvision==0.19.0 \
+    torchvision==0.21.0 \
     --index-url https://download.pytorch.org/whl/cu118
 
 # Install Flash Attention 2 (required by DeepSeek-OCR)
@@ -107,7 +107,7 @@ RUN python -c "from transformers import AutoModel, AutoTokenizer; \
 
 # ==================== STAGE 2: Final runtime image ====================
 # Use devel image instead of runtime to have all cuDNN libraries needed by PaddlePaddle
-FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
