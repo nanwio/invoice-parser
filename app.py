@@ -27,15 +27,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Failed to register HEIF support: {e}")
 
-    # Startup: Eager initialization of hybrid TATR + PaddleOCR pipeline
-    logger.info("Eagerly initializing hybrid TATR + PaddleOCR pipeline on startup...")
+    # Startup: Eager initialization of DeepSeek-OCR
+    logger.info("Eagerly initializing DeepSeek-OCR on startup...")
     try:
-        from src.services.table_detection.processor import create_hybrid_processor
-        # This call will trigger initialization of TATR and PaddleOCR models
-        _ = create_hybrid_processor()
-        logger.success("Hybrid TATR + PaddleOCR pipeline successfully initialized on startup")
+        from src.services.ocr.deepseek import DeepSeekOCRProcessor
+        # This call will trigger lazy loading of DeepSeek-OCR model
+        _ = DeepSeekOCRProcessor()
+        logger.success("DeepSeek-OCR successfully initialized on startup")
     except Exception as e:
-        logger.critical(f"Application startup failed: Could not initialize hybrid pipeline. Reason: {e}")
+        logger.critical(f"Application startup failed: Could not initialize DeepSeek-OCR. Reason: {e}")
         # The app will run, but OCR endpoints will fail until the issue is resolved.
 
     yield

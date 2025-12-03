@@ -1,6 +1,6 @@
 # ==============================================================================
-# GPU-enabled multi-stage Dockerfile for invoice-parser with PaddleOCR
-# Based on CUDA 12.1.1 for Google Cloud Run GPU (NVIDIA L4)
+# GPU-enabled multi-stage Dockerfile for invoice-parser with DeepSeek-OCR
+# Based on CUDA 11.8 for Google Cloud Run GPU (NVIDIA L4)
 # ==============================================================================
 
 # ==================== STAGE 1: Builder (install + pre-cache models) ====================
@@ -58,18 +58,22 @@ RUN pip uninstall -y paddlepaddle paddlepaddle-tiny || true && \
     paddleclas==2.5.2 \
     opencv-python-headless==4.8.1.78
 
-# Install PyTorch with CUDA 12.1 support (for Table Transformer)
+# Install PyTorch 2.6.0 with CUDA 11.8 support (for DeepSeek-OCR)
 RUN pip install --no-cache-dir \
-    torch==2.4.0 \
+    torch==2.6.0 \
     torchvision==0.19.0 \
-    --index-url https://download.pytorch.org/whl/cu121
+    --index-url https://download.pytorch.org/whl/cu118
+
+# Install Flash Attention 2 (required by DeepSeek-OCR)
+RUN pip install --no-cache-dir flash-attn==2.7.3 --no-build-isolation
 
 # Install remaining application dependencies
 # IMPORTANT: Pin numpy<2 to prevent upgrade (PaddlePaddle requires NumPy 1.x)
 RUN pip install --no-cache-dir \
     "numpy<2" \
-    transformers==4.36.2 \
-    timm \
+    transformers==4.46.3 \
+    tokenizers==0.20.3 \
+    einops==0.7.0 \
     fastapi==0.115.6 \
     uvicorn==0.32.1 \
     gunicorn==21.0.0 \
@@ -92,15 +96,14 @@ RUN pip install --no-cache-dir \
 COPY *.py ./
 COPY src ./src
 
-# Pre-cache Table Transformer model (downloaded during build, not runtime)
-# This ensures instant cold starts on Cloud Run
-RUN python -c "from transformers import AutoImageProcessor, TableTransformerForObjectDetection; \
-    AutoImageProcessor.from_pretrained('microsoft/table-transformer-structure-recognition'); \
-    TableTransformerForObjectDetection.from_pretrained('microsoft/table-transformer-structure-recognition')"
+# Pre-cache DeepSeek-OCR model (downloaded during build, not runtime)
+# This ensures instant cold starts on Cloud Run (~6.6GB model)
+RUN python -c "from transformers import AutoModel, AutoTokenizer; \
+    AutoTokenizer.from_pretrained('deepseek-ai/DeepSeek-OCR', trust_remote_code=True); \
+    AutoModel.from_pretrained('deepseek-ai/DeepSeek-OCR', trust_remote_code=True, use_safetensors=True)"
 
-# NOTE: PaddleOCR models download on first request at runtime
-# Similar to maite-transcripto-gpu pattern: lazy initialization when GPU is available
-# Models will be downloaded to /root/.paddleocr on first inference (~40MB total)
+# NOTE: PaddleOCR models still available for vision mode if needed
+# Models download on first request at runtime (~40MB total)
 
 # ==================== STAGE 2: Final runtime image ====================
 # Use devel image instead of runtime to have all cuDNN libraries needed by PaddlePaddle
@@ -136,7 +139,7 @@ COPY --from=builder /usr/local/lib/python3.12/dist-packages /usr/local/lib/pytho
 # Copy application code from builder
 COPY --from=builder /app /app
 
-# Copy cached TATR model from builder (Hugging Face cache in /root/.cache)
+# Copy cached DeepSeek-OCR model from builder (Hugging Face cache in /root/.cache)
 COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
 
 # Create non-root user and set permissions
