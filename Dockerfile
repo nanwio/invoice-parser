@@ -65,7 +65,11 @@ RUN pip install --no-cache-dir \
     torchvision==0.21.0 \
     --index-url https://download.pytorch.org/whl/cu118
 
+# Install Flash Attention 2 build dependencies first
+RUN pip install --no-cache-dir ninja packaging setuptools wheel
+
 # Install Flash Attention 2 (required by DeepSeek-OCR)
+# IMPORTANT: --no-build-isolation allows flash-attn to see torch installation
 RUN pip install --no-cache-dir flash-attn==2.7.3 --no-build-isolation
 
 # Install remaining application dependencies
