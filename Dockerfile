@@ -96,15 +96,18 @@ RUN pip install --no-cache-dir \
     openvino==2024.5.0 \
     "fastapi-jwt[authlib]==0.3.0" \
     pyjwt==2.10.1 \
-    pypdf==3.17.4
+    pypdf==3.17.4 \
+    huggingface-hub==0.28.1
 
 # Copy application code
 COPY *.py ./
 COPY src ./src
 
-# NOTE: DeepSeek-OCR model (~6.6GB) will download on first request at runtime
-# This avoids build timeouts and keeps Docker image size reasonable
-# PaddleOCR models still available (~40MB total)
+# Pre-download DeepSeek-OCR model files (~6.6GB) during build
+# Downloads to /root/.cache/huggingface (builder stage cache)
+# This runs WITHOUT GPU, only downloads files (no model initialization)
+ENV HF_HOME=/root/.cache/huggingface
+RUN python download_model.py
 
 # ==================== STAGE 2: Final runtime image ====================
 # Use devel image instead of runtime to have all cuDNN libraries needed by PaddlePaddle
@@ -143,14 +146,15 @@ COPY --from=builder /app /app
 # Create non-root user and set permissions
 RUN groupadd --system --gid 1001 appuser && \
     useradd --system --create-home --uid 1001 --gid 1001 appuser && \
+    mkdir -p /home/appuser/.cache/huggingface /home/appuser/.paddleocr /home/appuser/.paddleclas && \
     chown -R appuser:appuser /app
+
+# Copy pre-downloaded DeepSeek-OCR model from builder (~6.6GB)
+# This eliminates first-request download time and prevents startup timeouts
+COPY --from=builder --chown=appuser:appuser /root/.cache/huggingface /home/appuser/.cache/huggingface
 
 # Switch to non-root user for runtime
 USER appuser
-
-# Create directories for runtime model downloads in user's home
-# DeepSeek-OCR (~6.6GB) + PaddleOCR (~40MB) will download on first request
-RUN mkdir -p /home/appuser/.paddleocr /home/appuser/.paddleclas /home/appuser/.cache/huggingface
 
 # Set environment variables to use user's home for model cache
 ENV HOME=/home/appuser
