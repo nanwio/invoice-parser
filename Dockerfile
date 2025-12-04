@@ -79,6 +79,7 @@ RUN pip install --no-cache-dir \
     transformers==4.46.3 \
     tokenizers==0.20.3 \
     einops==0.7.0 \
+    addict \
     fastapi==0.115.6 \
     uvicorn==0.32.1 \
     gunicorn==21.0.0 \
