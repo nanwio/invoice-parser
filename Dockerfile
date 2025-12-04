@@ -102,14 +102,9 @@ RUN pip install --no-cache-dir \
 COPY *.py ./
 COPY src ./src
 
-# Pre-cache DeepSeek-OCR model (downloaded during build, not runtime)
-# This ensures instant cold starts on Cloud Run (~6.6GB model)
-RUN python -c "from transformers import AutoModel, AutoTokenizer; \
-    AutoTokenizer.from_pretrained('deepseek-ai/DeepSeek-OCR', trust_remote_code=True); \
-    AutoModel.from_pretrained('deepseek-ai/DeepSeek-OCR', trust_remote_code=True, use_safetensors=True)"
-
-# NOTE: PaddleOCR models still available for vision mode if needed
-# Models download on first request at runtime (~40MB total)
+# NOTE: DeepSeek-OCR model (~6.6GB) will download on first request at runtime
+# This avoids build timeouts and keeps Docker image size reasonable
+# PaddleOCR models still available (~40MB total)
 
 # ==================== STAGE 2: Final runtime image ====================
 # Use devel image instead of runtime to have all cuDNN libraries needed by PaddlePaddle
@@ -145,9 +140,6 @@ COPY --from=builder /usr/local/lib/python3.12/dist-packages /usr/local/lib/pytho
 # Copy application code from builder
 COPY --from=builder /app /app
 
-# Copy cached DeepSeek-OCR model from builder (Hugging Face cache in /root/.cache)
-COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
-
 # Create non-root user and set permissions
 RUN groupadd --system --gid 1001 appuser && \
     useradd --system --create-home --uid 1001 --gid 1001 appuser && \
@@ -157,12 +149,13 @@ RUN groupadd --system --gid 1001 appuser && \
 USER appuser
 
 # Create directories for runtime model downloads in user's home
-# (models will be downloaded on first request)
-RUN mkdir -p /home/appuser/.paddleocr /home/appuser/.paddleclas
+# DeepSeek-OCR (~6.6GB) + PaddleOCR (~40MB) will download on first request
+RUN mkdir -p /home/appuser/.paddleocr /home/appuser/.paddleclas /home/appuser/.cache/huggingface
 
 # Set environment variables to use user's home for model cache
 ENV HOME=/home/appuser
 ENV PADDLEOCR_HOME=/home/appuser/.paddleocr
+ENV HF_HOME=/home/appuser/.cache/huggingface
 
 # Expose port
 EXPOSE 8000
