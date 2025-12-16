@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """
 Pre-download DeepSeek-OCR model files during Docker build.
-Downloads model weights without initializing (no GPU required).
+Uses HF_TOKEN for authenticated downloads (avoids rate limiting).
 """
 
+import os
 from huggingface_hub import snapshot_download
 from loguru import logger
 
 MODEL_NAME = "deepseek-ai/DeepSeek-OCR"
 
 if __name__ == "__main__":
-    logger.info(f"Pre-downloading {MODEL_NAME} model files...")
+    token = os.environ.get("HF_TOKEN")
+    logger.info(f"Pre-downloading {MODEL_NAME} (authenticated: {bool(token)})...")
 
     try:
         cache_dir = snapshot_download(
             repo_id=MODEL_NAME,
+            token=token,
             allow_patterns=["*.safetensors", "*.json", "*.txt", "*.py", "*.model"],
             ignore_patterns=["*.msgpack", "*.h5", "*.ot"],
         )

@@ -6,6 +6,9 @@
 # ==================== STAGE 1: Builder (install + pre-cache models) ====================
 FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04 AS builder
 
+# HuggingFace token for authenticated model downloads (avoids rate limiting)
+ARG HF_TOKEN
+
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -105,9 +108,9 @@ COPY src ./src
 
 # Pre-download DeepSeek-OCR model files (~6.6GB) during build
 # Downloads to /root/.cache/huggingface (builder stage cache)
-# This runs WITHOUT GPU, only downloads files (no model initialization)
+# Uses HF_TOKEN for authenticated download (avoids rate limiting)
 ENV HF_HOME=/root/.cache/huggingface
-RUN python download_model.py
+RUN HF_TOKEN=${HF_TOKEN} python download_model.py
 
 # ==================== STAGE 2: Final runtime image ====================
 # Use devel image instead of runtime to have all cuDNN libraries needed by PaddlePaddle
