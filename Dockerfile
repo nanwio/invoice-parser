@@ -156,11 +156,10 @@ RUN groupadd --system --gid 1001 appuser && \
 # This eliminates first-request download time and prevents startup timeouts
 COPY --from=builder --chown=appuser:appuser /root/.cache/huggingface /home/appuser/.cache/huggingface
 
-# Create cache directories for transformers and paddle
-# These must be writable at runtime for dynamic code loading
-RUN mkdir -p /home/appuser/.cache/huggingface/modules \
-             /home/appuser/.cache/paddle && \
-    chown -R appuser:appuser /home/appuser/.cache
+# Create modules directory for transformers dynamic code loading
+# This directory must be writable at runtime for trust_remote_code=True models
+RUN mkdir -p /home/appuser/.cache/huggingface/modules && \
+    chown -R appuser:appuser /home/appuser/.cache/huggingface
 
 # Switch to non-root user for runtime
 USER appuser
