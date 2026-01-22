@@ -72,11 +72,67 @@ Detection: If headers contain UPPERCASE category names (HONORARIOS, SUPLIDOS, FE
 - due_date: Payment deadline (YYYY-MM-DD, null if absent)
 - order_number: PO reference (null if absent)
 
-## 2. PARTIES EXTRACTION
-Extract vendor (issuer) and customer (recipient):
-- name: Full legal/business name
+## 2. PARTIES EXTRACTION (CRITICAL - MOST COMMON ERROR SOURCE)
+
+FUNDAMENTAL RULE: The entity that ISSUES/CREATES the invoice is ALWAYS the VENDOR.
+The entity that RECEIVES/PAYS the invoice is ALWAYS the CUSTOMER.
+
+### Layout Detection Strategy (Spanish/European Invoices):
+
+STEP 1 - Identify the VENDOR (issuer):
+- Look for LOGO, letterhead, or company name at TOP of document
+- Usually has complete contact info: phone, email, website
+- Footer often contains full vendor details (address, tax ID, registration)
+- Keywords near vendor: "Emisor", "De:", "From:", company slogan
+- The entity whose branding appears on the invoice IS the vendor
+
+STEP 2 - Identify the CUSTOMER (recipient):
+- Usually in a BOX or SECTION labeled: "Cliente", "Customer", "Bill To", "Facturar a", "Destinatario"
+- Often positioned TOP-RIGHT or below vendor header
+- Keywords: "Cliente Nº", "Customer ID", "A:", "To:", "Sold To"
+- The entity being BILLED is the customer
+
+STEP 3 - Match Tax IDs to correct party:
+- Look for "N.I.F:", "C.I.F:", "VAT:", "Tax ID:" NEAR each entity's name
+- Spanish pattern: N.I.F/C.I.F appears directly below or beside company name
+- CRITICAL: Do NOT swap tax IDs between vendor and customer
+
+### Common Layout Patterns:
+
+PATTERN A - Header/Box Layout (Most Common):
+```
+┌─────────────────────────────────────────────────┐
+│  [VENDOR LOGO]              │  CUSTOMER DATA    │
+│  Vendor Name                │  Customer Name    │
+│  Vendor Address             │  Customer Address │
+│  N.I.F: B12345678          │  N.I.F: A87654321 │
+└─────────────────────────────────────────────────┘
+```
+
+PATTERN B - Vertical Layout:
+```
+[VENDOR LOGO + NAME]
+Vendor Address, Phone, Email
+─────────────────────────────
+DATOS DEL CLIENTE / BILL TO:
+Customer Name
+Customer Address
+N.I.F: X12345678
+```
+
+PATTERN C - Footer Vendor Details:
+```
+[LOGO only at top]
+Customer box in header
+...invoice content...
+─────────────────────────────
+FOOTER: Full vendor name, address, N.I.F, registration info
+```
+
+### Extraction Fields:
+- name: Full legal/business name (REQUIRED - use "Unknown" only if truly absent)
 - tax_id: Tax identifier AS SHOWN (NIF, CIF, VAT number, EIN, ABN, GST number, etc.)
-- address: Complete address with city, postal code, country
+- address: Complete address with street, city, postal code, country
 - contact: Email, phone, fax (structured object)
 
 ## 3. FINANCIAL DETAILS
@@ -138,6 +194,21 @@ Array for secondary taxes (environmental, electricity, municipal, multiple VAT r
 - Same extraction rules: explicit amounts only, NEVER calculate
 - Example: "Impuesto electricidad: 2.16€" → {{type: "Impuesto electricidad", rate: 0.0, amount: 2.16}}
 
+### Surcharges (CRITICAL FOR UTILITY BILLS)
+Extract charges that are NOT products/services and NOT taxes:
+- "Alquiler del contador" / "Meter rental" → surcharge (NOT a tax!)
+- "Recargo" / "Surcharge" / "Late fee" → surcharge
+- "Financiación Bono Social" / "Social bond financing" → surcharge
+- "Gastos de gestión" / "Administrative fees" → surcharge
+
+CRITICAL DISTINCTION:
+- TAXES have keywords: "Impuesto", "Tax", "IVA", "IGIC", "VAT", "GST" + rate (%)
+- SURCHARGES are flat fees or percentages WITHOUT tax keywords
+
+Example:
+- "Alquiler del contador: 0.72€" → surcharges: [{{description: "Alquiler del contador", amount: 0.72}}]
+- "Impuesto electricidad 5.11%: 1.82€" → additional_taxes (has "Impuesto" + rate)
+
 ### Discount
 ONLY if GLOBAL discount shown:
 - Look for: "Discount", "Descuento", "Dto.", "Rabatt"
@@ -180,28 +251,74 @@ Pattern: "13.856 kW × 29 días × 0.113358 €/kW día = 45.55 €"
 
 <EXAMPLES>
 
-Example 1 - Spanish Invoice with IGIC:
-OCR Input: "Factura A/41-23 ... IGIC: BASE 7 % ... IMPORTE LÍQUIDO: 45,00 €"
-Tax extraction: type: "IGIC", rate: 7.0, amount: 0.0 (rate shown, no charge applied)
+Example 1 - Vendor/Customer Identification (Spanish Professional Invoice):
+OCR Input:
+```
+UNIONAUDIT J.Y.E.                              RIVEYAN, SLU
+ASESORES CONSULTORES                           AV ENRIQUE MEDEROS EDF. EL JABLE 29
+                                               38760 - LOS LLANOS DE ARIDAN
+FECHA: 01/03/23  CLIENTE Nº: 1471             N.I.F: B38310322
+FACTURA: A/41-23
+...
+C/Imeldo Seris, 57, 2°-A S/C de Tenerife  Tlf: 922 534480
+UnionAudit J.Y.E. Consultores, S.L.P., CIF B38247367
+```
 
-Example 2 - German Invoice with MwSt:
+Extraction reasoning:
+- VENDOR: "UNIONAUDIT J.Y.E." appears as letterhead/logo at TOP-LEFT
+- VENDOR tax_id: B38247367 (found in FOOTER with full company name)
+- VENDOR address: C/Imeldo Seris, 57, 2°-A S/C de Tenerife (FOOTER)
+- CUSTOMER: "RIVEYAN, SLU" appears in TOP-RIGHT box (recipient area)
+- CUSTOMER tax_id: B38310322 (N.I.F shown NEAR customer name)
+- CUSTOMER address: AV ENRIQUE MEDEROS EDF. EL JABLE 29, 38760 LOS LLANOS
+
+Result:
+vendor: {{name: "UNIONAUDIT J.Y.E. ASESORES CONSULTORES", tax_id: "B38247367", address: {{street: "C/Imeldo Seris, 57, 2°-A", city: "Santa Cruz de Tenerife"}}}}
+customer: {{name: "RIVEYAN, SLU", tax_id: "B38310322", address: {{street: "AV ENRIQUE MEDEROS EDF. EL JABLE 29", city: "LOS LLANOS DE ARIDAN", postal_code: "38760"}}}}
+
+Example 2 - Spanish Invoice with IGIC (exempt):
+OCR Input: "Factura A/41-23 ... IGIC: BASE 7 % ... IMPORTE LÍQUIDO: 45,00 €"
+Tax extraction: type: "IGIC", rate: 7.0, amount: 0.0 (rate shown, no charge applied - exempt)
+
+Example 3 - German Invoice with MwSt:
 OCR Input: "Rechnung Nr. 2025-042 ... MwSt. 19%: 38,00 EUR ... Gesamtbetrag: 238,00 EUR"
 Tax extraction: type: "MwSt", rate: 19.0, amount: 38.0 (explicit amount)
 
-Example 3 - Australian Invoice with GST:
-OCR Input: "Invoice #1234 ... GST (10%): $25.00 ... Total: $275.00 AUD"
-Tax extraction: type: "GST", rate: 10.0, amount: 25.0, currency: "AUD"
+Example 4 - Electricity Bill with Surcharges (CRITICAL):
+OCR Input:
+```
+energiaXXI                                    CANOPALMA
+                                              AV ENRIQUE MEDEROS 298
+Factura: C24CON003123634                      N.I.F: V38735619
+...
+Potencia contratada: 12.50€
+Energía P1 (punta): 2.36€
+Energía P2 (llano): 1.16€
+Energía P3 (valle): 0.12€
+Alquiler del contador: 0.72€
+Financiación Bono Social: 0.91€
+Recargo del 20%: 5.93€
+IGIC reducido 3%: 1.34€
+Impuesto electricidad 5.11%: 1.82€
+TOTAL: 46.61€
+```
 
-Example 4 - US Invoice with Sales Tax:
-OCR Input: "Invoice INV-789 ... Sales Tax (8.5%): $17.00 ... Total Due: $217.00"
-Tax extraction: type: "Sales Tax", rate: 8.5, amount: 17.0
+Extraction:
+- items: [
+    {{description: "Potencia contratada", line_total: 12.50}},
+    {{description: "Energía P1 (punta)", line_total: 2.36}},
+    {{description: "Energía P2 (llano)", line_total: 1.16}},
+    {{description: "Energía P3 (valle)", line_total: 0.12}}
+  ]
+- surcharges: [
+    {{description: "Alquiler del contador", amount: 0.72}},
+    {{description: "Financiación Bono Social", amount: 0.91}},
+    {{description: "Recargo del 20%", amount: 5.93}}
+  ]
+- tax: {{type: "IGIC reducido", rate: 3.0, amount: 1.34}}
+- additional_taxes: [{{type: "Impuesto electricidad", rate: 5.11, amount: 1.82}}]
 
-Example 6 - Electricity Invoice with Special Taxes:
-OCR Input: "Factura C24CON003123634 ... IGIC reducido: 1,34€ ... Impuesto electricidad: 2,16€ ... Total: 46,61€"
-Tax extraction:
-  - Primary: type: "IGIC reducido", rate: 3.0, amount: 1.34
-  - Additional: [{{type: "Impuesto electricidad", rate: 0.0, amount: 2.16}}]
-Note: Type can be ANY string - extract exactly as shown
+Note: "Alquiler del contador" is a SURCHARGE (meter rental), NOT a tax!
 
 Example 5 - Pattern B Table (Expense Categories):
 TABLE 1 (Page 1) [1]
@@ -215,29 +332,45 @@ Note: Only ONE item, not three (HONORARIOS/SUPLIDOS/PROVISIONES are categories, 
 
 <ERROR_PREVENTION>
 
-ERROR 1: Treating table headers as items
+ERROR 1: Swapping Vendor and Customer (MOST CRITICAL)
+Wrong: Assigning customer address/tax_id to vendor because it appears first in OCR text
+Correct:
+- VENDOR = entity with LOGO/letterhead, creates the invoice, often has details in FOOTER
+- CUSTOMER = entity in "Cliente"/"Bill To" box, RECEIVES the invoice
+- Match each N.I.F/tax_id to the NEAREST company name
+
+ERROR 2: Treating table headers as items
 Wrong: items: [{{"description": "HONORARIOS"}}, {{"description": "SUPLIDOS"}}]
 Correct: items: [{{"description": "Actual item name", "line_total": 45.0}}]
 
-ERROR 2: Calculating tax amounts
+ERROR 3: Calculating tax amounts
 Wrong: See "VAT 20%" and calculate 100 × 0.20 = 20.0
 Correct: Extract tax ONLY if explicit: "VAT: £20.00" results in amount: 20.0
 
-ERROR 3: Hardcoding tax types
+ERROR 4: Hardcoding tax types
 Wrong: Always use "IVA" or "VAT"
 Correct: Extract exactly as shown (GST, MwSt, BTW, IGIC, Sales Tax, Impuesto electricidad, etc.)
 
-ERROR 4: Ignoring currency context
+ERROR 5: Ignoring currency context
 Wrong: Assume EUR for all invoices
 Correct: Extract from document (USD, GBP, AUD, CAD, INR, etc.)
 
-ERROR 5: Prioritizing type over amount
+ERROR 6: Prioritizing type over amount
 Wrong: Focus on getting tax type perfect, guess amount if unclear
 Correct: AMOUNT and RATE are critical. Type is descriptive only - any string is valid
 
-ERROR 6: Including surcharges/fees in items
+ERROR 7: Including surcharges/fees in items
 Wrong: items: [{{"description": "Recargo del 20%", "line_total": 7.05}}, {{"description": "Alquiler del contador", "line_total": 0.72}}]
 Correct: items: [{{"description": "Energía consumida", "line_total": 21.88}}] (surcharges/fees excluded)
+
+ERROR 8: Classifying rentals/fees as taxes
+Wrong: additional_taxes: [{{type: "Alquiler del contador", amount: 0.72}}]
+Correct: surcharges: [{{description: "Alquiler del contador", amount: 0.72}}]
+Rule: Only items with "Impuesto", "Tax", "IVA", "IGIC", "VAT", "GST" + rate (%) are taxes
+
+ERROR 9: Setting customer to "Unknown" when data exists
+Wrong: customer: {{name: "Unknown"}} when "RIVEYAN, SLU" and "N.I.F: B38310322" are visible
+Correct: Carefully scan for customer box/section, usually TOP-RIGHT or labeled "Cliente"/"Bill To"
 
 </ERROR_PREVENTION>
 
@@ -254,10 +387,14 @@ Return ONLY valid JSON conforming to this schema:
 
 <FINAL_CHECKLIST>
 Before returning JSON, verify (in priority order):
+[CRITICAL] vendor = invoice ISSUER (logo/letterhead entity), customer = invoice RECIPIENT ("Cliente"/"Bill To" box)
+[CRITICAL] vendor.tax_id and customer.tax_id are NOT swapped - match each to nearest company name
+[CRITICAL] customer.name is NOT "Unknown" if customer data is visible in document
 [CRITICAL] tax.amount extracted ONLY from explicit text (no calculations)
 [CRITICAL] tax.rate extracted accurately
 [CRITICAL] subtotal = exact sum of items[].line_total
 [CRITICAL] total_amount matches document
+[CRITICAL] surcharges contains rentals/fees (Alquiler, Recargo), NOT in additional_taxes
 All numeric fields are float or 0.0 (no null)
 items[] contains ONLY goods/services (no headers, taxes, fees, surcharges, rentals)
 currency is ISO 4217 code (EUR, USD, GBP, etc.)
