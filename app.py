@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
     # Startup: Eager initialization of PPStructure engine (used for invoice processing)
     logger.info("Eagerly initializing PPStructure engine on startup...")
     try:
-        from src.services.ocr.paddle.table_processor import InvoiceTableProcessor
+        from src.services.ocr.paddle.table_processing.processor import InvoiceTableProcessor
         # This call will trigger the singleton's _initialize() method
         _ = InvoiceTableProcessor()
         logger.success("PPStructure engine has been successfully initialized on startup")

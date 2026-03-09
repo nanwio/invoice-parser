@@ -17,9 +17,9 @@ def format_ocr_results_for_llm(ocr_results: list[dict]) -> str:
     for result in ocr_results:
         page_num = result.get("page_number", "N/A")
         text = result.get("text", "")
-        formatted_parts.append(f"[INICIO PÁGINA {page_num}]\\n{text}\\n[FIN PÁGINA {page_num}]")
+        formatted_parts.append(f"[INICIO PÁGINA {page_num}]\n{text}\n[FIN PÁGINA {page_num}]")
 
-    return "\\n\\n".join(formatted_parts)
+    return "\n\n".join(formatted_parts)
 
 
 async def cleanup_temp_file(temp_path: str):

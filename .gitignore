@@ -193,3 +193,20 @@ cython_debug/
 #.idea/
 
 facturas/
+
+# Claude Code
+CLAUDE.md
+.claude/
+
+# macOS
+.DS_Store
+*.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Debug docs
+DEPLOY_DEBUG.md

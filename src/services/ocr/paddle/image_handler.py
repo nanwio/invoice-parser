@@ -9,6 +9,11 @@ from loguru import logger
 from .quality_analysis.detector import ImageQualityDetector
 from .preprocessing.orchestrator import PreprocessingOrchestrator
 
+# OCR optimization constants
+OPTIMAL_DPI = 300
+MAX_IMAGE_DIMENSION = 2000
+PDF_THREAD_COUNT = 2
+
 
 class ImageHandler:
     """
@@ -35,16 +40,14 @@ class ImageHandler:
         Yields:
             A PIL Image for each page in the PDF.
         """
-        optimal_dpi = 70  # Aggressive reduction for maximum speed
-
         # OPTIMIZATION: Use JPEG format instead of PPM (default)
         # PPM is uncompressed (30MB+ per page), JPEG is 1-2MB
         # This reduces memory usage by 15-20x for multi-page PDFs
         images_from_pdf = convert_from_path(
             pdf_path,
-            dpi=optimal_dpi,
-            fmt='jpeg',  # Changed from 'RGB' (PPM) to 'jpeg' for memory efficiency
-            thread_count=2  # Reduced from 4: fewer threads = less memory contention
+            dpi=OPTIMAL_DPI,
+            fmt='jpeg',
+            thread_count=PDF_THREAD_COUNT
         )
 
         for image in images_from_pdf:
@@ -75,10 +78,8 @@ class ImageHandler:
             image = image.convert('RGB')
 
         # Smart resize: balance speed and quality for invoices
-        # Only resize very large images (>2000px) to avoid quality loss
-        max_dimension = 2000
-        if max(image.size) > max_dimension:
-            ratio = max_dimension / max(image.size)
+        if max(image.size) > MAX_IMAGE_DIMENSION:
+            ratio = MAX_IMAGE_DIMENSION / max(image.size)
             new_size = tuple(int(dim * ratio) for dim in image.size)
             image = image.resize(new_size, Image.Resampling.LANCZOS)
 

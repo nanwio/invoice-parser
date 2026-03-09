@@ -1,11 +1,11 @@
 """
-PaddleOCR Provider - Singleton pattern for managing PPStructure engine and GPU lock.
+PaddleOCR Provider - Dual-mode engine management for adaptive extraction.
 
-Based on maite-transcripto-gpu architecture:
-- Single engine instance (singleton)
-- GPU auto-detection
-- Global GPU lock for thread-safety
-- Lazy initialization
+TFG Edition (CPU-only):
+- Two engines: layout mode (complex docs) and table mode (simple docs)
+- Adaptive fallback strategy based on extraction quality
+- CPU-optimized configuration
+- Thread lock for concurrent request handling
 """
 from threading import Lock
 from typing import Optional, Any
@@ -22,87 +22,128 @@ except ImportError:
 
 class PaddleOCRProvider:
     """
-    Manages the lifecycle of the PPStructure engine and its GPU lock as a singleton.
-    
-    This class ensures that the OCR engine is initialized only once (lazy initialization)
-    when it's first requested by a dependency. This avoids race conditions and
-    initializes the GPU at the correct time in the application lifecycle.
-    
-    Based on maite-transcripto-gpu OCRProvider pattern.
+    Manages dual PPStructure engines for adaptive document extraction.
+
+    Two modes available:
+    - layout_engine (layout=True): Better for complex layouts with headers/footers
+    - table_engine (layout=False): Better for simple tabular documents
+
+    The processor uses fallback logic to choose the best result.
     """
-    _engine: Optional[Any] = None
-    _gpu_lock: Optional[Lock] = None
+    _layout_engine: Optional[Any] = None  # layout=True
+    _table_engine: Optional[Any] = None   # layout=False
+    _engine_lock: Optional[Lock] = None
     _is_gpu_available: bool = False
+    _initialized: bool = False
+
+    # Threshold for fallback: if layout mode extracts less than this, try table mode
+    FALLBACK_CHAR_THRESHOLD = 200
 
     @classmethod
     def _initialize(cls):
-        """
-        Private method to initialize the PPStructure engine and lock if they haven't been already.
-        This is called internally by the public getter methods.
-        """
-        if cls._engine is not None:
-            return  # Already initialized
+        """Initialize both PPStructure engines (layout and table modes)."""
+        if cls._initialized:
+            return
 
         if not PPSTRUCTURE_AVAILABLE:
             raise ImportError("PaddleOCR PPStructure not installed. Install with: pip install paddleocr>=2.7")
 
-        logger.info("Lazy-initializing PPStructure engine on first request...")
+        logger.info("Initializing dual PPStructure engines (CPU mode)...")
         try:
-            # Auto-detect GPU availability
             cls._is_gpu_available = paddle.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0
-            
-            if cls._is_gpu_available:
-                logger.info(f"✅ GPU detected: {paddle.device.cuda.device_count()} CUDA device(s) available")
-            else:
-                logger.info("❌ No GPU detected - running in CPU mode")
 
-            # Initialize PPStructure with auto-detected GPU
-            cls._engine = PPStructure(
+            if cls._is_gpu_available:
+                logger.info(f"GPU detected: {paddle.device.cuda.device_count()} CUDA device(s)")
+            else:
+                logger.info("Running in CPU mode (paddlepaddle CPU version)")
+
+            # Engine 1: Layout mode (layout=True)
+            # Better for complex documents with headers, footers, customer boxes
+            logger.info("  Initializing layout engine (layout=True)...")
+            cls._layout_engine = PPStructure(
                 show_log=False,
-                table=True,              # Enable table recognition (critical for invoices)
-                ocr=True,                # Enable OCR within tables
-                layout=True,             # Enable layout analysis
-                image_orientation=True,  # Enable rotation detection
-                use_angle_cls=False,     # OPTIMIZATION: Skip angle classification (saves 20-30% time)
-                lang='en',               # Must be 'en' or 'ch' (layout model requirement)
-                use_gpu=cls._is_gpu_available,  # Auto-detect GPU
-                enable_mkldnn=False,     # Disabled for stability (not needed on GPU)
-                cpu_threads=1,           # Single thread for stability
+                table=True,
+                ocr=True,
+                layout=True,             # Full layout analysis
+                image_orientation=False,
+                use_angle_cls=False,
+                lang='en',
+                use_gpu=False,
+                enable_mkldnn=False,
+                cpu_threads=4,
             )
-            
-            # This lock is crucial for serializing GPU access when handling concurrent requests.
-            cls._gpu_lock = Lock()
-            
-            logger.success(
-                f"PPStructure engine and GPU lock initialized successfully "
-                f"({'GPU mode' if cls._is_gpu_available else 'CPU mode'})"
+
+            # Engine 2: Table mode (layout=False)
+            # Better for simple/tabular documents where layout detection fails
+            logger.info("  Initializing table engine (layout=False)...")
+            cls._table_engine = PPStructure(
+                show_log=False,
+                table=True,
+                ocr=True,
+                layout=False,            # Treat as table for full extraction
+                image_orientation=False,
+                use_angle_cls=False,
+                lang='en',
+                use_gpu=False,
+                enable_mkldnn=False,
+                cpu_threads=4,
             )
+
+            cls._engine_lock = Lock()
+            cls._initialized = True
+
+            logger.success("Dual PPStructure engines initialized (layout + table modes)")
 
         except Exception as e:
-            logger.critical(f"Failed to initialize PPStructure engine: {e}")
-            # Raising an exception here will prevent the application from starting if the engine fails.
-            raise RuntimeError(f"Could not initialize PPStructure Engine: {e}") from e
+            logger.critical(f"Failed to initialize PPStructure engines: {e}")
+            raise RuntimeError(f"Could not initialize PPStructure Engines: {e}") from e
 
     @classmethod
-    def get_engine(cls) -> Any:
-        """Initializes (if needed) and returns the singleton PPStructure engine instance."""
+    def get_engine(cls, mode: str = "layout") -> Any:
+        """
+        Get PPStructure engine by mode.
+
+        Args:
+            mode: "layout" for complex docs, "table" for simple docs
+
+        Returns:
+            PPStructure engine instance
+        """
         cls._initialize()
-        return cls._engine
+        if mode == "table":
+            return cls._table_engine
+        return cls._layout_engine
+
+    @classmethod
+    def get_layout_engine(cls) -> Any:
+        """Get the layout-mode engine (layout=True)."""
+        cls._initialize()
+        return cls._layout_engine
+
+    @classmethod
+    def get_table_engine(cls) -> Any:
+        """Get the table-mode engine (layout=False)."""
+        cls._initialize()
+        return cls._table_engine
 
     @classmethod
     def get_lock(cls) -> Lock:
-        """Initializes (if needed) and returns the singleton GPU lock instance."""
+        """Get the engine lock for thread safety."""
         cls._initialize()
-        if cls._gpu_lock is None:
-            # This should be unreachable if _initialize() runs correctly.
-            raise RuntimeError("GPU lock was not initialized.")
-        return cls._gpu_lock
+        if cls._engine_lock is None:
+            raise RuntimeError("Engine lock was not initialized.")
+        return cls._engine_lock
 
     @classmethod
     def is_gpu_available(cls) -> bool:
-        """Returns whether GPU is available. Initializes engine if needed."""
+        """Returns whether GPU is available."""
         cls._initialize()
         return cls._is_gpu_available
+
+    @classmethod
+    def get_fallback_threshold(cls) -> int:
+        """Get the character threshold for fallback logic."""
+        return cls.FALLBACK_CHAR_THRESHOLD
 
 
 # --- FastAPI Dependencies (for future use) ---
@@ -113,5 +154,5 @@ def get_engine() -> Any:
 
 
 def get_lock() -> Lock:
-    """FastAPI dependency to get the GPU lock, ensuring it's initialized."""
+    """FastAPI dependency to get the engine lock, ensuring it's initialized."""
     return PaddleOCRProvider.get_lock()

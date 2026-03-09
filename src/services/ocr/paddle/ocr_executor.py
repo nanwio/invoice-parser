@@ -1,4 +1,4 @@
-from typing import List, Generator, Dict, Any, Tuple
+from typing import Generator, Any
 from PIL import Image
 from paddleocr import PaddleOCR
 import asyncio
@@ -30,7 +30,7 @@ class OcrExecutor:
         # so multiple workers just add context switching overhead
         self.executor = ThreadPoolExecutor(max_workers=1)
 
-    async def _run_ocr_on_image_async(self, page_index: int, image: Image.Image) -> Tuple[int, List[str]]:
+    async def _run_ocr_on_image_async(self, page_index: int, image: Image.Image) -> tuple[int, list[str]]:
         """
         Run OCR on a single image, returning the page index and extracted text lines.
         """
@@ -56,7 +56,7 @@ class OcrExecutor:
         text_lines = await loop.run_in_executor(self.executor, _ocr_sync, image)
         return (page_index, text_lines)
 
-    async def run_ocr_on_images_parallel(self, image_generator: Generator[Image.Image, None, None]) -> List[Dict[str, Any]]:
+    async def run_ocr_on_images_parallel(self, image_generator: Generator[Image.Image, None, None]) -> list[dict[str, Any]]:
         """
         Run OCR on a generator of images, returning structured page-by-page results.
         """

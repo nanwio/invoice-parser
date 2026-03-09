@@ -6,6 +6,8 @@ class TextTruncator:
     """Truncates excessively long text for Gemini processing."""
 
     MAX_LENGTH = 150000  # Conservative limit: ~30k tokens
+    KEEP_START_CHARS = 100000
+    KEEP_END_CHARS = 50000
 
     @staticmethod
     def truncate(ocr_text: str) -> str:
@@ -28,8 +30,12 @@ class TextTruncator:
             f"Truncating to {TextTruncator.MAX_LENGTH} chars to prevent timeout."
         )
 
-        # Keep first 100k + last 50k chars (preserves summary and totals)
-        truncated = ocr_text[:100000] + "\\n\\n[... MIDDLE CONTENT TRUNCATED ...]\\n\\n" + ocr_text[-50000:]
+        # Keep start + end chars (preserves summary and totals)
+        truncated = (
+            ocr_text[:TextTruncator.KEEP_START_CHARS] +
+            "\n\n[... MIDDLE CONTENT TRUNCATED ...]\n\n" +
+            ocr_text[-TextTruncator.KEEP_END_CHARS:]
+        )
 
         logger.info(f"Truncated OCR text from {original_length} to {len(truncated)} chars")
 

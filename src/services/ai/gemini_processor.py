@@ -1,11 +1,11 @@
 """Gemini AI processor for invoice structuring (Text-only mode)."""
-from typing import Tuple, Dict, Any, Optional
+from typing import Any, Optional
 from loguru import logger
 import google.generativeai as genai
 import json
 
 from src.domain.models import Invoice
-from src.services.ai.gemini.prompts_v3 import get_structuring_prompt
+from src.services.ai.gemini.prompts import get_structuring_prompt
 from src.services.ai.gemini.utils.json_cleaner import JSONCleaner
 from src.services.ai.gemini.utils.json_repairer import JSONRepairer
 from src.services.ai.gemini.utils.text_truncator import TextTruncator
@@ -23,12 +23,12 @@ class GeminiInvoiceProcessor:
             model_name=app_settings.ai_model.GEMINI_MODEL_NAME,
             generation_config={
                 "response_mime_type": "application/json",
-                "temperature": 0.1,
+                "temperature": 0.0,  # Zero temperature for maximum consistency
             }
         )
         logger.info("Gemini processor initialized in TEXT mode with semantic ontology")
 
-    async def structure_invoice_data_from_text(self, ocr_text: str) -> Tuple[Optional[Invoice], Dict[str, Any]]:
+    async def structure_invoice_data_from_text(self, ocr_text: str) -> tuple[Optional[Invoice], dict[str, Any]]:
         """
         Structures invoice data from OCR text.
 
@@ -42,6 +42,8 @@ class GeminiInvoiceProcessor:
 
         try:
             ocr_text = TextTruncator.truncate(ocr_text)
+            # DEBUG: Log the actual OCR text being sent to Gemini
+            logger.debug(f"OCR text for Gemini ({len(ocr_text)} chars):\n{ocr_text}")
             schema = json.dumps(Invoice.model_json_schema(), indent=2)
             full_prompt = get_structuring_prompt(schema) + ocr_text
 

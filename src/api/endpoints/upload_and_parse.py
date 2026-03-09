@@ -38,10 +38,10 @@ SUPPORTED_MIMETYPES = [
     description="""
     Parse an invoice document using PaddleOCR + Gemini Text pipeline:
 
-    - **Processing method**: PaddleOCR/PPStructure (GPU-accelerated) + Gemini Text API
-    - **Speed**: Fast processing (~2s typical)
+    - **Processing method**: PaddleOCR/PPStructure + Gemini Text API
+    - **Speed**: Fast processing (~5-10s typical on CPU)
     - **Accuracy**: High quality with table recognition and layout analysis
-    - **Cost-effective**: No Vision API costs
+    - **Cost-effective**: Text-based processing
 
     Example:
     - `POST /api/v1/invoice/parse`
