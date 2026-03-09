@@ -1,0 +1,59 @@
+steps:
+  # Build the container image
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-f"
+      - "./Dockerfile"
+      - "-t"
+      - "gcr.io/$PROJECT_ID/invoice-parser:$BUILD_ID"
+      - "."
+
+  # Push the container image to Container Registry
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/invoice-parser:$BUILD_ID"]
+
+  # Deploy container image to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "invoice-parser-api"
+      - "--image"
+      - "gcr.io/$PROJECT_ID/invoice-parser:$BUILD_ID"
+      - "--region"
+      - "europe-west4"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+      - "--memory"
+      - "16Gi"
+      - "--cpu"
+      - "4"
+      - "--timeout"
+      - "300s"
+      - "--max-instances"
+      - "1"
+      - "--min-instances"
+      - "0"
+      - "--gpu"
+      - "1"
+      - "--gpu-type"
+      - "nvidia-l4"
+      - "--no-cpu-throttling"
+      - "--port"
+      - "8000"
+      - "--remove-env-vars"
+      - "REDIS_URL"
+      - "--update-env-vars"
+      - "ENVIRONMENT=production,GEMINI_MODEL_NAME=gemini-2.5-flash-lite,DEBUG_OCR_OUTPUT=true"
+      - "--update-secrets"
+      - "GEMINI_API_KEY=GEMINI_API_KEY:latest,JWT_SECRET_KEY=SECRET_KEY:latest,REDIS_URL=REDIS_URL:latest"
+
+images:
+  - "gcr.io/$PROJECT_ID/invoice-parser:$BUILD_ID"
+
+# Build options to fix service account logging requirement
+options:
+  logging: CLOUD_LOGGING_ONLY
