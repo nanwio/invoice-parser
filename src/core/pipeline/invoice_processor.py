@@ -38,7 +38,12 @@ class InvoiceProcessor:
         logger.info("InvoiceProcessor initialized in OCR+TEXT mode")
 
 
-    async def process_invoice(self, document_bytes: bytes, content_type: str) -> tuple[Invoice, dict]:
+    async def process_invoice(
+        self,
+        document_bytes: bytes,
+        content_type: str,
+        document_hash: str | None = None,
+    ) -> tuple[Invoice, dict]:
         """
         Processes an invoice using PaddleOCR + Gemini Text pipeline.
 
@@ -51,10 +56,13 @@ class InvoiceProcessor:
         Args:
             document_bytes: Raw document bytes
             content_type: MIME type (application/pdf or image/*)
+            document_hash: Optional precomputed SHA-256 hash of the document
+                (typically passed in for PDFs, where caching uses the hash as key)
 
         Returns:
             Tuple of (Invoice object, processing metadata dict)
         """
+        hash_repr = document_hash if document_hash else "N/A for non-PDF files"
         start_time = time.perf_counter()
         logger.info(f"Starting invoice processing (OCR mode) for content type: {content_type}")
 
@@ -118,7 +126,7 @@ class InvoiceProcessor:
                 logger.error("Gemini failed to extract valid invoice data")
                 return None, {
                     **gemini_metadata,
-                    "document_hash": "N/A for non-PDF files",
+                    "document_hash": hash_repr,
                     "processing_method": "paddleocr_gemini_text",
                     "total_processing_time": time.perf_counter() - start_time,
                     "performance_breakdown": {
@@ -171,7 +179,7 @@ class InvoiceProcessor:
             **gemini_metadata,
             "validation": validation_result.to_dict(),
             "mathematical_validation": math_validation_result.to_dict(),
-            "document_hash": "N/A for non-PDF files",
+            "document_hash": hash_repr,
             "processing_method": "paddleocr_gemini_text",
             "total_processing_time": total_time,
             "performance_breakdown": {

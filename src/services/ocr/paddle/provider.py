@@ -66,8 +66,8 @@ class PaddleOCRProvider:
                 ocr=True,
                 layout=True,             # Full layout analysis
                 image_orientation=False,
-                use_angle_cls=False,
-                lang='en',
+                use_angle_cls=True,
+                lang='es',
                 use_gpu=False,
                 enable_mkldnn=False,
                 cpu_threads=4,
@@ -82,8 +82,8 @@ class PaddleOCRProvider:
                 ocr=True,
                 layout=False,            # Treat as table for full extraction
                 image_orientation=False,
-                use_angle_cls=False,
-                lang='en',
+                use_angle_cls=True,
+                lang='es',
                 use_gpu=False,
                 enable_mkldnn=False,
                 cpu_threads=4,

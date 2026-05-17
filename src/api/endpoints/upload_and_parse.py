@@ -13,6 +13,7 @@ from loguru import logger
 
 from src.api.security.jwt_auth import get_current_user
 from src.cache.redis_cache import invoice_cache
+from src.config.settings import app_settings
 from src.core.pipeline.invoice_processor import InvoiceProcessor
 from src.domain.models import InvoiceParseResponse
 from src.utils.document_utils import document_utils
@@ -65,6 +66,13 @@ async def upload_and_parse_invoice(
     if not file_bytes:
         raise HTTPException(status_code=400, detail="The uploaded file is empty.")
 
+    max_bytes = app_settings.invoice_processing.MAX_FILE_SIZE_MB * 1024 * 1024
+    if len(file_bytes) > max_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File size exceeds the {app_settings.invoice_processing.MAX_FILE_SIZE_MB} MB limit."
+        )
+
     # Caching is currently enabled only for PDFs due to reliable hashing.
     if file.content_type == "application/pdf":
         file_hash = document_utils.calculate_file_hash(file_bytes)
@@ -92,7 +100,9 @@ async def upload_and_parse_invoice(
 
     # Initialize processor (single mode: OCR + Gemini Text)
     processor = InvoiceProcessor()
-    invoice_data, processing_results = await processor.process_invoice(file_bytes, file.content_type)
+    invoice_data, processing_results = await processor.process_invoice(
+        file_bytes, file.content_type, document_hash=file_hash
+    )
 
     # Check if invoice processing failed (validation error, parsing error, etc.)
     if invoice_data is None:

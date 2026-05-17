@@ -6,7 +6,7 @@ class LineItem(BaseModel):
     """Individual item entry in the invoice."""
     item_id: Optional[str] = Field(None, description="Item identifier")
     description: Optional[str] = Field(None, description="Item description")
-    quantity: float = Field(..., description="Quantity (can be decimal)")
+    quantity: float = Field(..., ge=0, description="Quantity (can be decimal, non-negative)")
     unit_price: float = Field(ge=0, description="Price per unit")
     line_total: float = Field(ge=0, description="Total for this line")
 
