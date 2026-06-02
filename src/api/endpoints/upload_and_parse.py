@@ -54,7 +54,8 @@ async def upload_and_parse_invoice(
     user: str = Depends(get_current_user)
 ):
     job_id = str(uuid4())
-    logger.info(f"[Job {job_id}] Received file '{file.filename}' from user '{user['username']}'")
+    job_start = time.perf_counter()
+    logger.info(f"[Job {job_id}] start - file='{file.filename}' user='{user['username']}'")
 
     if file.content_type not in SUPPORTED_MIMETYPES:
         raise HTTPException(
@@ -78,11 +79,12 @@ async def upload_and_parse_invoice(
         file_hash = document_utils.calculate_file_hash(file_bytes)
         cached_invoice = await invoice_cache.get_cached_invoice(file_hash)
         if cached_invoice:
-            logger.info(f"[Job {job_id}] Cache HIT for PDF. Returning cached result.")
+            elapsed = time.perf_counter() - job_start
+            logger.info(f"[Job {job_id}] end - result=cache_hit elapsed={elapsed:.3f}s")
             processing_results = {
                 "validation": {"is_valid": True, "quality_score": 100.0, "errors": [], "warnings": []},
                 "processing_method": "cache_hit",
-                "total_processing_time": 0.01,
+                "total_processing_time": elapsed,
                 "document_info": document_utils.extract_document_info(file_bytes, file_hash)
             }
             response = InvoiceParseResponse(
@@ -121,6 +123,9 @@ async def upload_and_parse_invoice(
 
     if file_hash:
         await invoice_cache.cache_invoice(file_hash, invoice_data)
+
+    elapsed = time.perf_counter() - job_start
+    logger.info(f"[Job {job_id}] end - result=success elapsed={elapsed:.3f}s")
 
     response = InvoiceParseResponse(
         invoice=invoice_data,

@@ -49,7 +49,7 @@ class GeminiInvoiceProcessor:
 
             response = await self._client.generate_content_async(
                 full_prompt,
-                request_options={"timeout": 120}
+                request_options={"timeout": app_settings.ai_model.GEMINI_TIMEOUT_SECONDS}
             )
 
             # DEBUG: Log Gemini response
