@@ -24,7 +24,7 @@ class AIModelSettings(BaseSettings):
     """Settings for AI model configuration."""
 
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
-    GEMINI_MODEL_NAME: str = "gemini-2.5-flash-lite"  # 40% faster, 50% fewer tokens
+    GEMINI_MODEL_NAME: str = "gemini-2.5-flash"  # Better reasoning over tabular OCR (column heuristics, plausibility checks)
     GEMINI_TEMPERATURE: float = 0.0  # Zero for maximum speed and consistency
     GEMINI_MAX_TOKENS: int = 1500   # Reduced for speed (was 2000)
     GEMINI_TIMEOUT_SECONDS: int = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "120"))

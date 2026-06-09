@@ -45,7 +45,8 @@ google-generativeai = "^0.8.6"
 # OCR - PaddlePaddle CPU (PaddleOCR installed separately via pip --no-deps)
 # Note: PaddleOCR 2.7.x has PyMuPDF dependency that fails on macOS ARM64
 # Install paddleocr manually: pip install paddleocr==2.7.0.3 --no-deps
-paddlepaddle = "2.6.2"
+# 3.2.1 ships OpenBLAS with native Apple Silicon support; 2.6.2 (OpenBLAS 0.3.13, 2022) is ~100x slower on M-series CPUs.
+paddlepaddle = "3.2.1"
 
 # Image Processing
 numpy = ">=1.26.0,<2.0.0"

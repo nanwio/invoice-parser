@@ -3,8 +3,8 @@
 # TFG Edition - Simplified deployment without GPU requirements
 # ==============================================================================
 
-# Use official Python 3.12 slim image (much smaller than CUDA images)
-FROM python:3.12-slim
+# Use Python 3.12 slim on Debian 12 (bookworm) for stable package names
+FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -28,15 +28,38 @@ WORKDIR /app
 # Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install numpy first (required by paddlepaddle)
-RUN pip install --no-cache-dir numpy==1.26.4
+# Install numpy <2 first (paddleocr + imgaug require numpy 1.x)
+RUN pip install --no-cache-dir "numpy<2"
 
-# Install PaddlePaddle CPU and PaddleOCR
-# Note: paddlepaddle (not paddlepaddle-gpu) for CPU-only deployment
+# Install PaddlePaddle CPU
+# 3.2.1 is required for performant inference on Apple Silicon hosts (M-series).
+# 2.6.2 ships OpenBLAS 0.3.13 (2022, pre-Apple-Silicon) and is ~100x slower on M-series CPUs.
+RUN pip install --no-cache-dir paddlepaddle==3.2.1
+
+# Install PaddleOCR runtime dependencies first (avoids pulling PyMuPDF, which fails to build on arm64)
+# All deps are pinned with "numpy<2" already in the environment to avoid upgrading numpy to 2.x
 RUN pip install --no-cache-dir \
-    paddlepaddle==2.6.2 \
-    paddleocr==2.7.0.3 \
-    opencv-python-headless==4.10.0.84
+    "numpy<2" \
+    opencv-python-headless==4.10.0.84 \
+    shapely \
+    "scikit-image<0.23" \
+    pyclipper \
+    lmdb \
+    tqdm \
+    rapidfuzz \
+    cython \
+    pyyaml \
+    beautifulsoup4 \
+    fonttools \
+    fire \
+    requests \
+    premailer \
+    openpyxl \
+    attrdict \
+    "imgaug==0.4.0"
+
+# Install PaddleOCR without dependencies (PyMuPDF would be pulled otherwise and lacks arm64 wheels)
+RUN pip install --no-cache-dir --no-deps paddleocr==2.7.0.3
 
 # Install remaining application dependencies
 RUN pip install --no-cache-dir \
@@ -56,11 +79,14 @@ RUN pip install --no-cache-dir \
     pdf2image==1.17.0 \
     pyjwt==2.10.1 \
     pypdf==5.1.0 \
-    pandas==2.2.3
+    pandas==2.2.3 \
+    fastapi-jwt==0.3.0 \
+    python-dotenv==1.0.1
 
 # Copy application code
 COPY app.py ./
 COPY src ./src
+COPY scripts ./scripts
 
 # Create non-root user for security
 RUN groupadd --system --gid 1001 appuser && \
@@ -82,4 +108,4 @@ EXPOSE 8000
 
 # Run with gunicorn (can use multiple workers on CPU)
 # 2 workers for better concurrency on multi-core CPUs
-CMD ["python", "-m", "gunicorn", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "300", "--chdir", "/app", "app:app"]
+CMD ["python", "-m", "gunicorn", "-w", "1", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "300", "--chdir", "/app", "app:app"]

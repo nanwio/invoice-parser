@@ -136,6 +136,33 @@ PATTERN B - Expense Category Table:
 - Action: Extract ONE item with description + non-zero category as line_total
 
 Detection: If headers contain UPPERCASE category names (HONORARIOS, SUPLIDOS, FEES, EXPENSES, PROVISIONES) → Pattern B
+
+PATTERN C - Item Row With Auxiliary Columns (discount, tax rate):
+Spanish wholesale/retail invoices frequently include extra columns between unit_price and the
+final amount. Common layouts:
+- `Codigo | Descripcion | Cantidad | Precio | Dto.% | Importe | IGIC%`
+- `Reference | Description | Qty | Unit Price | Discount | Total | Tax Rate`
+
+When the OCR stream for an item row contains MORE numeric values than {{quantity, unit_price, line_total}},
+identify which value is the actual line_total using the following rules:
+
+1. line_total is the value labeled "Importe", "Total", "Subtotal", "Amount", "Importe línea", "Net amount".
+2. Values that look like SMALL PERCENTAGES (e.g., 3,0 / 5,0 / 7,0 / 10,00 / 0,00) sitting between
+   unit_price and the final amount are almost always a DISCOUNT COLUMN (Dto.%) — IGNORE them.
+3. Values that look like SMALL PERCENTAGES sitting AFTER the final amount are tax rate columns
+   (IGIC%, IVA%, VAT%) — also IGNORE them when picking line_total.
+4. PLAUSIBILITY CHECK: line_total should be ≈ quantity × unit_price × (1 - discount), where
+   discount ∈ [0, 0.5]. If your candidate line_total is more than ~50% off from qty × unit_price,
+   re-examine the row: a percentage-looking value is probably masquerading as line_total.
+
+Example row (PATTERN C - synthetic):
+OCR stream for a row: `SKU-001 Widget A 10,000 2,000 5,00 19,00 21,0`
+                       ^id    ^desc     ^qty   ^price ^Dto% ^Total ^Tax%
+Correct: {{item_id: "SKU-001", description: "Widget A", quantity: 10.0,
+          unit_price: 2.0, line_total: 19.0}}
+Wrong:   line_total: 5.0  (that's the discount column, not the total)
+
+Sanity: 10 × 2,00 × 0,95 = 19,00 ✓ — confirms the discount interpretation.
 </CONTEXT>
 
 <INSTRUCTIONS>
@@ -207,6 +234,9 @@ Extract for each party:
 CRITICAL RULE: subtotal = SUM of ALL items[].line_total
 - Calculate by summing line_total from items array
 - Do NOT use document's stated subtotal
+- Do NOT copy the "TOTAL" / "Total a Pagar" / "Grand Total" value into subtotal — that field is
+  the gross total (subtotal + taxes - withholdings). The subtotal is strictly the pre-tax sum of items.
+- Even if the OCR text has a bare number near a "Subtotal" label, IGNORE it and recompute from items.
 
 ### Tax Extraction (CHAIN OF THOUGHT)
 
@@ -289,6 +319,10 @@ For each item:
 - quantity: Quantity (float, default 1.0 if absent)
 - unit_price: Price per unit (float ≥0, default 0.0 if absent)
 - line_total: Line total (float ≥0, default 0.0 if absent)
+  - Pick the value from the "Importe" / "Total" / "Amount" column, NOT from a discount or tax-rate column.
+  - SANITY CHECK before finalising: line_total must satisfy
+    `0.5 × (qty × unit_price) ≤ line_total ≤ 1.05 × (qty × unit_price)` (allows up to 50% line discount).
+    If your candidate violates this and another nearby number does satisfy it, switch to that number.
 
 Special handling for utility bills (formula lines):
 Pattern: "13.856 kW × 29 días × 0.113358 €/kW día = 45.55 €"
@@ -402,6 +436,19 @@ ERROR 8: Misinterpreting Spanish dates
 Wrong: "1 de 3 de 2023" → "2023-01-03" (treating as Jan 3)
 Correct: "1 de 3 de 2023" → "2023-03-01" (March 1st - day/month/year format)
 Rule: Spanish dates are DAY de MONTH de YEAR
+
+ERROR 11: Picking discount or tax-rate column as line_total
+Wrong: row `Widget B 4,000 12,500 10,00 45,00 21,0` → line_total: 10.0  (that's Dto.%)
+Correct: line_total: 45.0  (the printed total column)
+Rule: When more numeric values appear than {{qty, unit_price, line_total}}, the small percentage-shaped
+values (≤ 20, often 0,00 / 3,0 / 5,00 / 7,0 / 10,00) between unit_price and the printed total are
+the DISCOUNT column. Apply the plausibility check qty × unit_price ≈ line_total (within ±50%).
+
+ERROR 12: Putting the document TOTAL into the subtotal field
+Wrong: financial_details.subtotal: 121.00  (taken from "TOTAL: 121,00€")
+Correct: subtotal = sum of items[].line_total (e.g., 100.00); tax: 21.00; total_amount: 121.00
+Rule: subtotal is PRE-TAX. Never reuse the TOTAL line as subtotal even when no explicit
+"Subtotal" label is present.
 
 </ERROR_PREVENTION>
 

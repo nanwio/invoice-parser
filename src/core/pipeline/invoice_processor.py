@@ -140,7 +140,7 @@ class InvoiceProcessor:
             # Step 3: Apply financial corrections
             logger.info("Step 3/5: Applying intelligent financial corrections")
             correction_start = time.perf_counter()
-            invoice = CorrectionOrchestrator.apply_all_corrections(invoice)
+            invoice = CorrectionOrchestrator.apply_all_corrections(invoice, ocr_text=formatted_text)
             correction_time = time.perf_counter() - correction_start
 
             # Step 4: Mathematical validation (with auto-correction)

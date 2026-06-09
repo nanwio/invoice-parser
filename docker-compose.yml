@@ -1,0 +1,38 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: invoice-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+    platform: linux/amd64
+    container_name: invoice-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: "${SECRET_KEY:?SECRET_KEY env var is required}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:?GEMINI_API_KEY env var is required}"
+      GEMINI_TIMEOUT_SECONDS: "${GEMINI_TIMEOUT_SECONDS:-120}"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - paddleocr-models:/home/appuser/.paddleocr
+      - ./facturas:/app/facturas:ro
+
+volumes:
+  paddleocr-models:

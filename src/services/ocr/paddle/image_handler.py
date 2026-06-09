@@ -10,7 +10,7 @@ from .quality_analysis.detector import ImageQualityDetector
 from .preprocessing.orchestrator import PreprocessingOrchestrator
 
 # OCR optimization constants
-OPTIMAL_DPI = 300
+OPTIMAL_DPI = 300  # High-fidelity OCR for dense invoice tables (qty/price/discount/total columns).
 MAX_IMAGE_DIMENSION = 2000
 PDF_THREAD_COUNT = 2
 
